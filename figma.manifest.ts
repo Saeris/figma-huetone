@@ -32,7 +32,9 @@ export interface FigmaManifest {
 }
 
 export const manifest: FigmaManifest = {
-  name: "Figma Plugin Template",
+  // Working name — the plugin cannot ship under the "Huetone" name (see SPEC.md
+  // §6). Replace with the real product name before publishing.
+  name: "Huetone (working title)",
   // Replace with the id Figma assigns on first publish.
   id: "000000000000000000",
   api: "1.0.0",

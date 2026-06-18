@@ -1,22 +1,28 @@
 {
-  "name": "figma-plugin-template",
+  "name": "figma-huetone",
   "version": "0.0.0",
   "private": true,
-  "description": "An opinionated template for building Figma plugins with React, a type-safe IPC bridge, and the Vite+ toolchain",
+  "description": "A Figma-native port of Huetone: author accessible okLCH color palettes as Figma Variables, with APCA/WCAG contrast and live editing",
   "keywords": [
     "figma",
     "figma-plugin",
-    "template",
+    "huetone",
+    "oklch",
+    "color",
+    "palette",
+    "design-tokens",
+    "apca",
+    "accessibility",
     "react",
     "vite",
     "typescript"
   ],
-  "homepage": "https://github.com/Saeris/figma-plugin-template#readme",
+  "homepage": "https://github.com/Saeris/figma-huetone#readme",
   "license": "MIT",
   "author": "Drake Costa <drake@saeris.gg> (https://saeris.gg)",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Saeris/figma-plugin-template.git"
+    "url": "https://github.com/Saeris/figma-huetone.git"
   },
   "type": "module",
   "scripts": {
@@ -40,9 +46,11 @@
     "vitest": "npm:@voidzero-dev/vite-plus-test@latest"
   },
   "dependencies": {
+    "colorjs.io": "^0.6.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "signal-polyfill": "0.2.2"
+    "signal-polyfill": "0.2.2",
+    "valibot": "^1.4.1"
   },
   "resolutions": {
     "vite": "npm:@voidzero-dev/vite-plus-core@latest",
