@@ -31,7 +31,7 @@ several disconnected tools:
 - **Huetone** for okLCH ramp authoring with perceptual contrast feedback, but it
   serializes to **hex** — so okLCH precision is lost on every reload.
 - **A contrast checker** (e.g. contrast.tools, APCA calculator) to validate that
-  a foreground/background pair is legible *at a given font size and weight* — not
+  a foreground/background pair is legible _at a given font size and weight_ — not
   just as an abstract ratio.
 - **Figma** itself, where the palette ultimately lives as **Variables**, entered
   and corrected by hand, with no link back to the perceptual source values.
@@ -55,7 +55,7 @@ typography rules rather than a single contrast number.
    **valid okLCH range** per channel for each swatch, the contrast of their
    **current canvas selection**, and a **grid** of which pairings pass for which
    font weight/size.
-5. A consumer can build Alias / Scoped / Pattern token layers *on top of* our
+5. A consumer can build Alias / Scoped / Pattern token layers _on top of_ our
    managed Base Tokens collection without ever needing to hand-edit it.
 6. The palette **round-trips out** to a code distribution: the user exports
    CSS-variable color tokens in the shape of [`@saeris/colors`](https://github.com/Saeris/colors)
@@ -96,12 +96,12 @@ depth in the `figma-plugin-architecture` skill and `CLAUDE.md`):
 
 Source: `ardov/huetone` (branch `master`).
 
-| Concern | Huetone today | Our port |
-| --- | --- | --- |
-| **Palette model** | `Palette = { mode, name, hues[], tones[], colors: TColor[][] }`; `TColor` carries `l,c,h` + `r,g,b,hex` + `within_sRGB/P3/Rec2020` gamut flags. Grid = hues × tones. | Keep the hues×tones matrix concept, but the *grid* is projected from a Figma Variable collection: hue groups = variable name prefixes (`red`, `orange`…), tones = scale steps (25–950), and Huetone's "mode" (color space) is fixed to okLCH while a *second* axis — Figma **modes** (`light`/`dark`/`high-contrast`/colorblind) — replaces Huetone's single palette. |
-| **Color math** | CSS WG conversions (Lea Verou / Chris Lilley) + chroma.js; okLCH↔sRGB, gamut flags drive chart shading. | Reuse the same conversion approach (likely [`culori`](https://culorijs.org) or the CSS WG functions directly) for okLCH↔sRGB/P3 and gamut testing. The gamut flag per swatch is what the chart shades and what gates whether a color is sRGB-representable for Figma. |
-| **Chart controls** | `src/components/ColorGraph/Chart/` — canvas (web-worker) render of the valid (L,C,H) region for each channel; you drag a point and the other channels' valid ranges re-shade. | Port the chart rendering to the UI thread, built on React Aria's **`useMove`** for accessible pointer+keyboard dragging (see §2.10). This is the highest-effort UI piece. **⚠ OPEN:** worker pool vs. main-thread canvas inside the Figma iframe (workers add bundling complexity to the single-file UI build). *Lean: main-thread first.* |
-| **Serialization** | `src/store/palette/converters.ts` exports **hex only** (localStorage, design tokens, CSS vars, LZString permalink). okLCH is recomputed from hex on load → **precision drift**. | **This is the core fix.** Persist canonical `oklch(L C H)` in the Figma Variable's **code syntax**, treat that as source of truth, and derive the RGBA render value from it. No hex round-trip. Conversions via **colorjs.io** (§2.9). |
+| Concern            | Huetone today                                                                                                                                                                   | Our port                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Palette model**  | `Palette = { mode, name, hues[], tones[], colors: TColor[][] }`; `TColor` carries `l,c,h` + `r,g,b,hex` + `within_sRGB/P3/Rec2020` gamut flags. Grid = hues × tones.            | Keep the hues×tones matrix concept, but the _grid_ is projected from a Figma Variable collection: hue groups = variable name prefixes (`red`, `orange`…), tones = scale steps (25–950), and Huetone's "mode" (color space) is fixed to okLCH while a _second_ axis — Figma **modes** (`light`/`dark`/`high-contrast`/colorblind) — replaces Huetone's single palette. |
+| **Color math**     | CSS WG conversions (Lea Verou / Chris Lilley) + chroma.js; okLCH↔sRGB, gamut flags drive chart shading.                                                                         | Reuse the same conversion approach via **colorjs.io** (§2.9) for okLCH↔sRGB/P3 and gamut testing. The gamut flag per swatch is what the chart shades and what gates whether a color is representable for Figma in the active profile.                                                                                                                                 |
+| **Chart controls** | `src/components/ColorGraph/Chart/` — canvas (web-worker) render of the valid (L,C,H) region for each channel; you drag a point and the other channels' valid ranges re-shade.   | Port the chart rendering to the UI thread, built on React Aria's **`useMove`** for accessible pointer+keyboard dragging (see §2.10). This is the highest-effort UI piece. **⚠ OPEN:** worker pool vs. main-thread canvas inside the Figma iframe (workers add bundling complexity to the single-file UI build). _Lean: main-thread first._                            |
+| **Serialization**  | `src/store/palette/converters.ts` exports **hex only** (localStorage, design tokens, CSS vars, LZString permalink). okLCH is recomputed from hex on load → **precision drift**. | **This is the core fix.** Persist canonical `oklch(L C H)` in the Figma Variable's **code syntax**, treat that as source of truth, and derive the RGBA render value from it. No hex round-trip. Conversions via **colorjs.io** (§2.9).                                                                                                                                |
 
 ### 2.3 Polychrom — contrast of the current selection
 
@@ -165,7 +165,7 @@ Sources: `Myndex/apca-w3`, APCA Readability Criterion (readtech.org/ARC).
   them (per `CLAUDE.md` Rule 7).
 - **Implementation:** colorjs.io provides both APCA and WCAG21 (§2.9), so we don't
   separately depend on `apca-w3`. The **font-lookup table** (Lc → min size/weight)
-  is *data*, not algorithm — we vendor it as a small typed table in `src/ui`.
+  is _data_, not algorithm — we vendor it as a small typed table in `src/ui`.
 
 ### 2.6 contrast.tools — the grid
 
@@ -201,7 +201,7 @@ Variable "color/red/500", mode "light":
 ```
 
 On load we read `codeSyntax.WEB`, parse okLCH → authoritative state. On edit we
-write **both** fields. The RGBA is *derived* and **perceptually gamut-mapped**
+write **both** fields. The RGBA is _derived_ and **perceptually gamut-mapped**
 (colorjs.io `toGamut({ method: "css" })`, binary-search chroma reduction in OKLCH —
 not naïve clipping), so the two can intentionally diverge — we preserve intent in
 okLCH and render the closest in-gamut color.
@@ -218,14 +218,14 @@ flowchart LR
 ```
 
 > **Note (see §2.14):** the okLCH source of truth is conceptually a DTCG token's
-> `$extensions` payload. Code syntax is the *Figma-native carrier* for it today; if
+> `$extensions` payload. Code syntax is the _Figma-native carrier_ for it today; if
 > Figma's native DTCG export matures to round-trip `$extensions`, that becomes the
 > cleaner home. Either way the model is DTCG; this is the storage mechanism.
 
 **Document color profile (confirmed).** `figma.root.documentColorProfile` returns
 `"LEGACY" | "SRGB" | "DISPLAY_P3"`. New files default to **sRGB**. Variable color
 values are `{ r, g, b, a }` 0–1 floats regardless of profile; the profile governs
-how Figma *interprets/renders* them. So our plan:
+how Figma _interprets/renders_ them. So our plan:
 
 - **Gamut target follows the document profile (decided).** Read
   `documentColorProfile` on launch (and on change). When the document is **Display
@@ -233,10 +233,10 @@ how Figma *interprets/renders* them. So our plan:
   against **sRGB**. Surface a hint reflecting which is active.
 - **Profile changes are safe because okLCH is the source.** Our okLCH in
   `$extensions`/code syntax is never touched by a profile switch — Figma re-maps the
-  *rendered* appearance on its side, and we re-derive `$value` from the preserved
+  _rendered_ appearance on its side, and we re-derive `$value` from the preserved
   okLCH against the new active gamut. So switching P3 → sRGB simply tightens the
   target; no data is lost.
-- If a color is out of the *active* gamut, show Huetone's gamut warning on that
+- If a color is out of the _active_ gamut, show Huetone's gamut warning on that
   swatch and shade the chart accordingly.
 - **⚠ OPEN:** exact UI for the warning + whether to offer a P3-vs-sRGB preview
   toggle independent of the document setting.
@@ -248,10 +248,10 @@ The UI iframe is a recent Chromium, so we have a narrow modern target:
 - `oklch(L C H / α)` is **Baseline widely available** (since 2023). L 0–1, C 0–~0.4
   (100% = 0.4), H degrees.
 - We can render swatches directly in okLCH and let the browser do the work; for the
-  *Figma value* we still down-convert + gamut-map to sRGB ourselves.
+  _Figma value_ we still down-convert + gamut-map to sRGB ourselves.
 - `light-dark()` and `color-scheme` are available but **mode is driven by Figma's
   variable modes, not the OS** — so the UI's own theming uses `--figma-color-*`,
-  while the *previewed palette* renders whichever Figma mode the user is editing.
+  while the _previewed palette_ renders whichever Figma mode the user is editing.
 
 ### 2.9 colorjs.io — the color engine
 
@@ -287,13 +287,13 @@ accessibility primitives.
 
 **Two complementary controls — not one.** The author's reference is desktop Adobe
 Lightroom's **Color Mixer** (the per-channel Hue / Saturation / Luminance sliders,
-each with a precise editable number input — *not* Lightroom Classic or Web). We pair
+each with a precise editable number input — _not_ Lightroom Classic or Web). We pair
 that with Huetone's histograms; they do different jobs and we keep both:
 
-| Control | Built on | Job |
-| --- | --- | --- |
-| **Per-channel sliders** (Lightroom-style) | React Aria **`useMove`** (the accessible pointer+keyboard drag primitive `useColorSlider` itself uses) + a paired **`useNumberField`** for exact entry | **Precision** — adjust L, C, or H of one swatch to an exact value. |
-| **Per-channel histograms** (Huetone-style) | canvas (see §2.4 chart row) | **Context** — visualize the **valid gamut range** for the channel *and* show how this swatch relates to its **sibling values across the ramp** (the whole row/column at once). |
+| Control                                    | Built on                                                                                                                                               | Job                                                                                                                                                                            |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Per-channel sliders** (Lightroom-style)  | React Aria **`useMove`** (the accessible pointer+keyboard drag primitive `useColorSlider` itself uses) + a paired **`useNumberField`** for exact entry | **Precision** — adjust L, C, or H of one swatch to an exact value.                                                                                                             |
+| **Per-channel histograms** (Huetone-style) | canvas (see §2.4 chart row)                                                                                                                            | **Context** — visualize the **valid gamut range** for the channel _and_ show how this swatch relates to its **sibling values across the ramp** (the whole row/column at once). |
 
 So a swatch editor shows: the histogram (where am I in the valid range, relative to
 my siblings?) above/beside the slider+number trio (nudge me to an exact value). We
@@ -316,12 +316,12 @@ robustness and composition ergonomics. We get them from **RHF + Valibot** with a
   channel bounds, a grid-axis config).
 - **Composition (the ergonomics we port from Ariakit):** a context `Form` provider
   plus field components (`Field`, `Label`, `Error`, and an abstract `Control` that
-  does *not* assume native `value`/`onChange`, for wrapping our `useMove`-based
+  does _not_ assume native `value`/`onChange`, for wrapping our `useMove`-based
   okLCH sliders). Components attach to form state by a **`name` prop** rather than
   prop-drilling `value`/`onChange`. Internally `Control` wraps RHF's
   `useController`; field-scoped reads wrap `useWatch`.
 - **The load-bearing DX detail — a typed `names` proxy.** Ariakit exposes
-  `form.names` (a proxy where `form.names.season` *is* the string `"season"` but is
+  `form.names` (a proxy where `form.names.season` _is_ the string `"season"` but is
   **typed** to that field) and `form.useValue(form.names.season)`. We reproduce this
   over RHF, **derived from the Valibot output type**, so:
   - `name={form.names.swatch.l}` is **type-checked** — a wrong/renamed path is a
@@ -330,8 +330,9 @@ robustness and composition ergonomics. We get them from **RHF + Valibot** with a
   - VSCode **rename-symbol** on a schema key cascades to every `name=` reference.
 
   The author uses this exact pattern (the Ariakit version) in
-  [`Saeris/anime-search`](https://github.com/Saeris/anime-search/blob/main/src/app/(search)/page.tsx)
+  [`Saeris/anime-search`](<https://github.com/Saeris/anime-search/blob/main/src/app/(search)/page.tsx>)
   — that's the **target DX**, but built on RHF here.
+
 - **⚠ This is a genuine R&D spike, not a one-shot.** A recursive typed-path proxy
   that matches Valibot's inferred output (nested objects, arrays) and wires cleanly
   to RHF's `useController`/`useWatch` will take iteration to get right. We isolate it
@@ -351,7 +352,7 @@ palette grid's axes as **user data**, and so do we:
 - We **seed** a Tailwind/Radix-style default scale (e.g. `50,100…900,950`) so a
   fresh palette **maps directly onto Shadcn/Tailwind** out of the box.
 - The plugin therefore owns a small **palette-config model** — ordered group names,
-  ordered scale names, the set of modes — that *projects onto* Figma variable
+  ordered scale names, the set of modes — that _projects onto_ Figma variable
   names + modes. Renaming a column renames the corresponding variables; reordering
   is metadata. **⚠ OPEN:** where this config lives (plugin data on the collection
   vs. derived purely from variable names) — ties into open question §6.5.
@@ -359,7 +360,7 @@ palette grid's axes as **user data**, and so do we:
 ### 2.13 Export workflow — match `@saeris/colors`
 
 The proven end-to-end lifecycle is **Figma → CSS tokens → NPM package → app**. Our
-plugin owns the first hop; the export must emit the *shape*
+plugin owns the first hop; the export must emit the _shape_
 [`@saeris/colors`](https://github.com/Saeris/colors)'s `src/generate.ts` produces,
 so it drops straight into a Tailwind + Shadcn project:
 
@@ -391,24 +392,24 @@ Why DTCG specifically:
   (the spec's color spaces are RGB-family). So `$value` holds the DTCG `srgb`/`p3`
   representation that Figma and other tools understand, and the **canonical okLCH
   triple lives in `$extensions["io.saeris.huetone".oklch]`** (reverse-domain key;
-  the spec *requires* tools to preserve extension data they don't understand). We
+  the spec _requires_ tools to preserve extension data they don't understand). We
   keep the perceptual source **and** stay interoperable.
 - **Aliases map 1:1 to Figma.** DTCG references (`{group.token}` curly-brace syntax)
   correspond directly to Figma variable aliases — which validates the author's
   layered vision end to end: our **Base Tokens** are concrete DTCG `color` tokens;
   consumers' **Alias / Scoped / Pattern** layers are DTCG references over them.
 - **Figma is moving to native DTCG export.** Aligning our model to DTCG means we
-  *ride the emerging standard* rather than inventing a private one, and it future-
+  _ride the emerging standard_ rather than inventing a private one, and it future-
   proofs interop with Style Dictionary, Tokens Studio, etc.
 
 **Where things sit:**
 
-| Layer | Representation |
-| --- | --- |
-| Canonical model | DTCG token tree: groups (color names) → tokens (scale steps), `$type: "color"`, `$value` = DTCG color, `$extensions….oklch` = source |
-| Figma (persistence) | Variables: `$value`→ gamut-mapped RGBA `valueForMode`; `$extensions.oklch`→ code syntax (§2.7); aliases→ variable aliases |
-| Editor (UI state) | okLCH read from `$extensions`; RHF/Valibot forms validate edits back into the tree |
-| Export | Transforms of the tree → `@saeris/colors` CSS (§2.13), Tailwind/Shadcn, Style Dictionary, raw DTCG JSON |
+| Layer               | Representation                                                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Canonical model     | DTCG token tree: groups (color names) → tokens (scale steps), `$type: "color"`, `$value` = DTCG color, `$extensions….oklch` = source |
+| Figma (persistence) | Variables: `$value`→ gamut-mapped RGBA `valueForMode`; `$extensions.oklch`→ code syntax (§2.7); aliases→ variable aliases            |
+| Editor (UI state)   | okLCH read from `$extensions`; RHF/Valibot forms validate edits back into the tree                                                   |
+| Export              | Transforms of the tree → `@saeris/colors` CSS (§2.13), Tailwind/Shadcn, Style Dictionary, raw DTCG JSON                              |
 
 **⚠ OPEN** (refine while building): the exact `$extensions` key/shape; whether the
 grid-axis config (§2.12) lives in a group-level `$extensions` block; how much of
@@ -419,6 +420,7 @@ DTCG we model in v1 vs. grow into (we only need `color` + groups + aliases now).
 ## 3. Goals & Non-Goals
 
 ### Goals (v1)
+
 - Read/render a managed **Base Tokens** color collection as a Huetone-style
   hue-group × tone grid, across Figma **modes**.
 - Live, two-way editing of swatches → Figma Variables, with okLCH persisted in code
@@ -433,16 +435,18 @@ DTCG we model in v1 vs. grow into (we only need `color` + groups + aliases now).
 - **CSS-token export** matching the `@saeris/colors` shape (§2.13).
 
 ### Deferred (post-v1, but designed for)
+
 - **Alpha variant** generation paired to each opaque Base Token (Radix approach,
   §2.4). The screenshot's opaque+alpha grid is the eventual target; alpha is always
-  *derived* from the opaque values over a user-defined background — never
+  _derived_ from the opaque values over a user-defined background — never
   hand-tweaked. We design the model to accommodate it but don't build it in v1.
 
 ### Non-Goals (v1)
-- Generating the full Alias / Scoped / Pattern token layers — we only *enable*
+
+- Generating the full Alias / Scoped / Pattern token layers — we only _enable_
   consumers to build them on our Base Tokens (we don't author them).
 - The disciplined multi-collection system from `@saeris/ui` end-to-end — that's
-  context for *how values get used*, not v1 scope.
+  context for _how values get used_, not v1 scope.
 - Importing arbitrary external palettes / Huetone permalinks (possible later).
 - Publishing automation beyond what the template's CI already does.
 
@@ -479,7 +483,7 @@ flowchart TB
 ### Proposed contract additions (illustrative — names to be finalized)
 
 The bridge payloads are **DTCG-shaped** (§2.14): a `TokenTree` is the DTCG color
-group tree (structured-clonable plain JSON — DTCG *is* JSON, so it crosses the
+group tree (structured-clonable plain JSON — DTCG _is_ JSON, so it crosses the
 bridge as-is).
 
 ```ts
@@ -519,12 +523,12 @@ independently reviewable.
   **Valibot** + resolver. Establish (a) the okLCH ↔ sRGB/P3 + gamut module over
   `colorjs.io/fn` and (b) the **DTCG `TokenTree` model + Valibot schema** in
   `src/ui`, both with unit tests (round-trip, gamut-map, DTCG↔okLCH `$extensions`).
-  *No Figma I/O yet.*
+  _No Figma I/O yet._
 
 - **Phase 0.5 — Form utilities spike (§2.11).** Build and test the home-grown RHF
   utilities: context `Form`, field `Control`, and the **typed `names` proxy derived
   from a Valibot schema**. Isolated in `src/ui/form/` with type-level tests. Flagged
-  R&D — gate before building real forms on it. *(Can run parallel to Phase 1.)*
+  R&D — gate before building real forms on it. _(Can run parallel to Phase 1.)_
 
 - **Phase 1 — Persistence spine.** Contract + sandbox handlers to discover/create
   the Base Tokens collection, read `documentColorProfile`, read variables into a
@@ -543,7 +547,7 @@ independently reviewable.
 - **Phase 4 — Dual color control.** Lightroom-style per-channel **sliders**
   (`useMove` + `useNumberField`) **and** Huetone per-channel **histograms** (valid
   range + sibling-ramp context), per §2.10. (Highest UI effort; decide worker vs.
-  main-thread render for the histograms — *lean main-thread*.)
+  main-thread render for the histograms — _lean main-thread_.)
 
 - **Phase 5 — Contrast engine + display.** APCA (Lc) + WCAG (colorjs.io) + the APCA
   **font-lookup table**; contrast display; **selection contrast** (sandbox
@@ -568,6 +572,7 @@ independently reviewable.
 ## 6. Open & Resolved Questions
 
 ### Resolved (through v0.3)
+
 - **Canonical model** → **DTCG token tree** (§2.14); Figma/UI/exports all project
   from it. okLCH source in `$extensions`; aliases ↔ Figma variable aliases.
 - **Color library** → **colorjs.io** (`/fn` tree-shakeable), supersedes culori.
@@ -589,17 +594,18 @@ independently reviewable.
   to add late. v1 emits raw DTCG JSON + `@saeris/colors` CSS.
 
 ### Still open (decide while building / iterate)
+
 1. **Form-utils typed-`names` proxy** (Phase 0.5): the recursive proxy ↔ Valibot
    output-type wiring is genuine R&D; budget iteration before forms depend on it.
 2. **`$extensions` shape** (Phase 0/1): exact reverse-domain key + okLCH payload
    shape; whether grid-axis config lives in a group-level `$extensions` block.
 3. **Histogram rendering** (Phase 4): worker pool vs. main-thread canvas in the
-   single-file UI build. *Lean: main-thread first.*
+   single-file UI build. _Lean: main-thread first._
 4. **Out-of-gamut UI** (Phase 2+): exact warning treatment; optional P3-vs-sRGB
    preview toggle independent of the document profile.
 5. **Palette identity / config storage** (Phase 1/3): plugin data on the collection
-   vs. derive purely from DTCG group/variable names + order. *Lean: plugin-data
-   marker for identity + config, names as the human-facing projection.*
+   vs. derive purely from DTCG group/variable names + order. _Lean: plugin-data
+   marker for identity + config, names as the human-facing projection._
 6. **Real product name** (Phase 8): cannot ship as "Huetone". Deferred by choice.
 
 ---
@@ -625,4 +631,7 @@ independently reviewable.
 - `@saeris/colors` (export target) — https://github.com/Saeris/colors
 - `@saeris/ui` token architecture — https://www.figma.com/design/FafgXG0tR6ahMUYqS85hyv/-saeris-ui
 - Author's multi-collection token architecture — https://www.tldraw.com/f/J95uMg4ql5CzfiyIYU9ts
+
+```
+
 ```
