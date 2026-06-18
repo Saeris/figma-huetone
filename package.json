@@ -1,0 +1,55 @@
+{
+  "name": "figma-plugin-template",
+  "version": "0.0.0",
+  "private": true,
+  "description": "An opinionated template for building Figma plugins with React, a type-safe IPC bridge, and the Vite+ toolchain",
+  "keywords": [
+    "figma",
+    "figma-plugin",
+    "template",
+    "react",
+    "vite",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Saeris/figma-plugin-template#readme",
+  "license": "MIT",
+  "author": "Drake Costa <drake@saeris.gg> (https://saeris.gg)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Saeris/figma-plugin-template.git"
+  },
+  "type": "module",
+  "scripts": {
+    "ci": "vp check && vp test",
+    "check": "vp check",
+    "format": "vp check --fix",
+    "test": "vp test --fileParallelism"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "1.128.0",
+    "@saeris/configs": "^1.6.1",
+    "@types/node": "^25.9.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "@vitest/coverage-v8": "4.1.8",
+    "typescript": "6.0.3",
+    "vite": "catalog:",
+    "vite-plugin-singlefile": "^2.3.3",
+    "vite-plus": "latest",
+    "vitest": "npm:@voidzero-dev/vite-plus-test@latest"
+  },
+  "dependencies": {
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "signal-polyfill": "0.2.2"
+  },
+  "resolutions": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@latest",
+    "vitest": "npm:@voidzero-dev/vite-plus-test@latest"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "yarn@4.16.0"
+}

@@ -1,0 +1,47 @@
+name: Release
+
+# Figma has no official publish API, so this workflow does NOT publish to the
+# Figma Community. Instead it builds the plugin and attaches a ready-to-import
+# `plugin.zip` (manifest.json + code.js + index.html) to a GitHub Release. To
+# ship to Community, download that zip and publish from the Figma desktop app
+# (Plugins → Development → Publish). See README "Publishing".
+#
+# Triggers on a pushed tag like `v1.2.3`, or manually via the Actions tab.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # create the GitHub Release and upload the asset
+
+jobs:
+  release:
+    name: Build & attach plugin.zip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: "lts"
+          cache: true
+
+      - run: vp check
+      - run: vp test
+      - run: vp run build
+
+      # Bundle exactly the three files Figma loads, flat at the zip root.
+      - name: Package plugin.zip
+        run: |
+          cd dist
+          zip -j ../plugin.zip manifest.json code.js index.html
+          cd ..
+          unzip -l plugin.zip
+
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: plugin.zip
+          generate_release_notes: true
