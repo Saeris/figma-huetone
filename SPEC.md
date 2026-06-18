@@ -1,454 +1,628 @@
-# Figma Plugin Template — Architecture Spec
+# Figma Huetone — Specification & Plan
 
-> **Status:** Built. This document is the decision log for why the template is shaped
-> the way it is — the research, the constraints, and the choices behind the code now in
-> the repo (originally forked from
-> [`Saeris/library-template`](https://github.com/Saeris/library-template)). The README
-> is the human-facing intro; `CLAUDE.md` primes agents working in the repo; the
-> `.claude/skills/figma-plugin-*` skills cover task-specific depth. This file explains
-> the _why_ those don't.
+> **Status:** Draft v0.3 — research + stack decisions resolved, awaiting review.
+> Nothing here is committed to code yet. Sections marked **⚠ OPEN** are decisions
+> we still need to make together before the relevant phase begins. (v0.2 folded in
+> the stack direction: colorjs.io, React Aria + RHF + Valibot, configurable grid,
+> CSS-token export. **v0.3** adopts the **DTCG token format as the canonical
+> internal model**, clarifies the **dual slider + histogram** color control, and
+> replaces the Ariakit dependency with **home-grown RHF form utilities**.
+> **v0.3.1** converts diagrams to Mermaid. **v0.3.2** resolves the P3 gamut
+> target — follow the document profile.)
+>
+> **Naming note:** the working collection name is `Huetone Base` and the plugin is
+> codenamed after Huetone, but **this is temporary** — we cannot ship under the
+> Huetone name. A real name is TBD and deliberately deferred.
 
----
-
-## 1. Goal
-
-A minimal **"hello figma!"** boilerplate that gets a developer from clone to a running
-plugin in minutes, with strong DX on the [Vite+](https://viteplus.dev) (`vp`) toolchain
-and first-class AI-assistant support. The headline differentiator over existing
-templates is a **type-safe, tRPC-like IPC bridge** between the plugin's two threads,
-replacing the untyped `postMessage` event-emitter pattern every other template ships.
-
-Two supporting libraries may be extracted from this template **later** (out of scope
-here — the ideas are proven minimally first):
-
-1. A React Figma **UI component library** built on React Aria (the vendored
-   `src/ui/components/` set is its seed).
-2. A reusable **type-safe IPC helper** for main↔UI communication (the `src/ipc/` layer
-   is its prototype).
+This document is the decision log for porting [Huetone](https://github.com/ardov/huetone)
+into a Figma-native plugin. It captures the background research, the motivations,
+the concrete goals, and a phased implementation plan grounded in the existing
+plugin template's architecture. It is expected to change substantially as we
+build; treat it as the living source of intent, with the README as the
+human-facing intro and the `.claude/skills/figma-plugin-*` skills as task depth.
 
 ---
 
-## 2. Starting point: what the template was
+## 1. Problem & Motivation
 
-The repo was a **library template** — its whole shape assumed "build an npm package →
-publish to npm": `package.json` `exports`/`publishConfig`/`files`/`sideEffects`, a
-tsdown `pack` build emitting `.mjs` + `.d.mts`, and Bumpy + OIDC npm publishing in CI.
-`src/index.ts` and its spec were empty.
+Building an accessible color palette today means shuttling values by hand between
+several disconnected tools:
 
-**A Figma plugin is architecturally the opposite of a library.** A library is
-_consumed_ by other code via `exports`; a plugin is a **deployed application** shipped
-as a `manifest.json` + bundled artifacts the Figma host loads. So the npm-publishing
-scaffolding was **removed**, not extended: no `exports`/`publishConfig`/`files`,
-no tsdown/`vp pack`, no Bumpy.
+- **Huetone** for okLCH ramp authoring with perceptual contrast feedback, but it
+  serializes to **hex** — so okLCH precision is lost on every reload.
+- **A contrast checker** (e.g. contrast.tools, APCA calculator) to validate that
+  a foreground/background pair is legible *at a given font size and weight* — not
+  just as an abstract ratio.
+- **Figma** itself, where the palette ultimately lives as **Variables**, entered
+  and corrected by hand, with no link back to the perceptual source values.
 
----
+The author has been doing this loop manually. The goal of this plugin is to
+**collapse that loop into one tool that lives where the palette lives** — inside
+Figma, editing Figma Variables in place, with the perceptual (okLCH) source of
+truth preserved losslessly, and with accessibility validated against real
+typography rules rather than a single contrast number.
 
-## 3. Figma plugin fundamentals (research)
+### What "done right" looks like
 
-Sources: [Figma plugin docs](https://developers.figma.com/docs/plugins/),
-[manifest reference](https://developers.figma.com/docs/plugins/manifest/),
-[CSS variables / theming](https://developers.figma.com/docs/plugins/css-variables/),
-and the official [`figma/plugin-samples`](https://github.com/figma/plugin-samples) source.
-
-### 3.1 Two-thread model
-
-A plugin runs as **two isolated contexts** that share no runtime — only a `postMessage`
-channel passing structured-clonable data:
-
-| Thread                               | Globals             | Has                 | Lacks                                   | Builds to                            |
-| ------------------------------------ | ------------------- | ------------------- | --------------------------------------- | ------------------------------------ |
-| **Main / sandbox** (`manifest.main`) | `figma`, `__html__` | the Figma scene API | **no DOM, no `fetch`, no `setTimeout`** | one JS file (`dist/code.js`)         |
-| **UI** (`manifest.ui`)               | `window`, DOM       | full browser APIs   | **no `figma`**                          | one inlined HTML (`dist/index.html`) |
-
-- Main → UI: `figma.ui.postMessage(msg)`; UI receives via `window` `message` events
-  (`event.data.pluginMessage`).
-- UI → Main: `parent.postMessage({ pluginMessage: msg }, "*")`; main receives via
-  `figma.ui.onmessage`.
-
-The sandbox is **QuickJS compiled to Wasm**, supporting **ES2020+** (classes, private
-fields, async/await, generators, modules) but **not guaranteed** to support ES2022+
-Explicit Resource Management (`using` / `Symbol.dispose`) — see §6.3.
-
-### 3.2 Manifest
-
-Required: `name`, `id`, `api`, `main`, `editorType`. Newly created plugins also require
-`documentAccess: "dynamic-page"` (which makes pages load lazily → use the async
-`figma.*` API). Network access is declared via `networkAccess.allowedDomains`. UI
-theming is enabled with `figma.showUI(__html__, { themeColors: true })`, which injects
-the `--figma-color-*` CSS variables and a `figma-light`/`figma-dark` class.
-
-`manifest.id` is **assigned by Figma on first publish**; the template ships a
-placeholder (`"000000000000000000"`) with a note to replace it.
-
-### 3.3 Reference implementation
-
-The official **`plugin-samples/esbuild-react`** is the closest prior art and was read
-in full. Findings that shaped this template:
-
-- Despite the name, **it uses Vite** for the UI, via
-  [`vite-plugin-singlefile`](https://www.npmjs.com/package/vite-plugin-singlefile).
-- **Split source dirs**, each with **its own `tsconfig.json`** (incompatible `lib`:
-  figma typings vs. `DOM` + `react-jsx`). This per-thread tsconfig split is universal.
-- UI build inlines _everything_ (`assetsInlineLimit: 100000000`, `cssCodeSplit: false`,
-  `inlineDynamicImports: true`) because Figma loads exactly one HTML file.
-- **Messaging is untyped** (stringly-typed `msg.type` switch) — the weak point we
-  improve on with the IPC bridge (§6).
+1. The plugin UI reads the document's managed **Base Tokens** collection and
+   renders it as Huetone's familiar ramp grid (hue groups × tone scale).
+2. Editing a swatch (via numeric input or the channel charts) updates the Figma
+   Variable **live** — both its rendered RGBA value and its canonical okLCH
+   source — so the canvas reflects the change immediately.
+3. okLCH precision survives reloads, because we persist it in the Variable's
+   **code syntax** field, not just the lossy RGBA value.
+4. The user can see, at a glance: APCA (Lc) and WCAG contrast for any pair, the
+   **valid okLCH range** per channel for each swatch, the contrast of their
+   **current canvas selection**, and a **grid** of which pairings pass for which
+   font weight/size.
+5. A consumer can build Alias / Scoped / Pattern token layers *on top of* our
+   managed Base Tokens collection without ever needing to hand-edit it.
+6. The palette **round-trips out** to a code distribution: the user exports
+   CSS-variable color tokens in the shape of [`@saeris/colors`](https://github.com/Saeris/colors)
+   and drops them straight into a Tailwind + Shadcn app (the end-to-end lifecycle
+   the author already proved by hand: Figma → `@saeris/colors` NPM package →
+   downstream app like `anime-search`).
 
 ---
 
-## 4. Ecosystem survey & best practices
+## 2. Background Research
 
-Surveyed: Figma's official samples,
-[`create-figma-plugin`](https://yuanqing.github.io/create-figma-plugin/) (the de-facto
-community framework), the React Figma UI libraries, and
-[Tokens Studio](https://github.com/tokens-studio/figma-plugin) (largest production React
-plugin).
+### 2.1 The plugin template we're building on
 
-| Practice                                                    | Consensus source                      |
-| ----------------------------------------------------------- | ------------------------------------- |
-| Separate `main`/`ui` source dirs, per-thread tsconfig       | Official samples, create-figma-plugin |
-| UI bundled to a single inlined HTML (`viteSingleFile`)      | Official Vite sample, Bolt Figma      |
-| `documentAccess: "dynamic-page"` + declared `networkAccess` | Required for new plugins              |
-| `themeColors: true` + `--figma-color-*` vars for theming    | Official theming API                  |
-| Watch-rebuild + Figma hot-reload (no true HMR)              | Forums, Bolt, Ditto template          |
-| `manifest.json` generated from one config source            | create-figma-plugin                   |
-| `@figma/plugin-typings` via `types`                         | All                                   |
+The repo is the author's Figma plugin template. The load-bearing facts (full
+depth in the `figma-plugin-architecture` skill and `CLAUDE.md`):
 
-**`create-figma-plugin`** — we borrowed the _ideas_ (config-as-single-source, typed
-event ergonomics, Figma-native components) but **skipped the framework**: it is
-Preact-first (swaps React→`preact/compat`) with its own `build-figma-plugin` CLI, which
-conflicts with our Vite+ + React choice.
+- **Two isolated threads, one message channel.**
+  - `src/main/` (sandbox): has `figma` + `__html__`, **no DOM**. QuickJS/ES2020 →
+    `dist/code.js`. All Variable reads/writes and node traversal live here.
+  - `src/ui/` (iframe): has DOM + React 19, **no `figma`**. → inlined
+    `dist/index.html`. All color math, charts, and rendering live here.
+- **The typed IPC bridge (`src/ipc/`) is the only extension surface.** We add
+  `Procedures` (UI→main request/reply) and `Events` (main→UI push) to
+  `contract.ts`; the bridge/transport/signals are generic over it. We never edit
+  `transport.ts`/`bridge.ts`. Only **structured-clonable** data crosses — so a
+  Variable becomes a plain record (`{ id, name, modeValues, codeSyntax }`), never
+  a live node.
+- **UI consumes pushed state via `eventSignal` + `useSignal`, async reads via
+  `asyncSignal`.** Reactive plumbing already exists and is tested.
+- **`documentAccess: "dynamic-page"`** → we must use the **async** `figma.*` API.
+- **Build:** `vp run build` (two passes + manifest), `vp check` (0 errors / 0
+  warnings is the bar), `vp test`. The contract test in `src/__tests__/` is the
+  load-bearing test and must stay meaningful as the contract grows.
+- **Theming:** UI styled exclusively with `--figma-color-*` variables; the
+  vendored `src/ui/components/` (Button, Input) are the seed set to extend.
 
-**Skills landscape** — every existing Figma skill (skills.sh, Figma's
-`community-resources/agent_skills`) is about _using_ Figma via the MCP server (design
-generation, design systems, Code Connect). **None teach plugin _authoring_.** This
-template fills that gap with **original** skills (§10).
+### 2.2 Huetone — what we port and what we change
+
+Source: `ardov/huetone` (branch `master`).
+
+| Concern | Huetone today | Our port |
+| --- | --- | --- |
+| **Palette model** | `Palette = { mode, name, hues[], tones[], colors: TColor[][] }`; `TColor` carries `l,c,h` + `r,g,b,hex` + `within_sRGB/P3/Rec2020` gamut flags. Grid = hues × tones. | Keep the hues×tones matrix concept, but the *grid* is projected from a Figma Variable collection: hue groups = variable name prefixes (`red`, `orange`…), tones = scale steps (25–950), and Huetone's "mode" (color space) is fixed to okLCH while a *second* axis — Figma **modes** (`light`/`dark`/`high-contrast`/colorblind) — replaces Huetone's single palette. |
+| **Color math** | CSS WG conversions (Lea Verou / Chris Lilley) + chroma.js; okLCH↔sRGB, gamut flags drive chart shading. | Reuse the same conversion approach (likely [`culori`](https://culorijs.org) or the CSS WG functions directly) for okLCH↔sRGB/P3 and gamut testing. The gamut flag per swatch is what the chart shades and what gates whether a color is sRGB-representable for Figma. |
+| **Chart controls** | `src/components/ColorGraph/Chart/` — canvas (web-worker) render of the valid (L,C,H) region for each channel; you drag a point and the other channels' valid ranges re-shade. | Port the chart rendering to the UI thread, built on React Aria's **`useMove`** for accessible pointer+keyboard dragging (see §2.10). This is the highest-effort UI piece. **⚠ OPEN:** worker pool vs. main-thread canvas inside the Figma iframe (workers add bundling complexity to the single-file UI build). *Lean: main-thread first.* |
+| **Serialization** | `src/store/palette/converters.ts` exports **hex only** (localStorage, design tokens, CSS vars, LZString permalink). okLCH is recomputed from hex on load → **precision drift**. | **This is the core fix.** Persist canonical `oklch(L C H)` in the Figma Variable's **code syntax**, treat that as source of truth, and derive the RGBA render value from it. No hex round-trip. Conversions via **colorjs.io** (§2.9). |
+
+### 2.3 Polychrom — contrast of the current selection
+
+Source: `evilmartians/figma-polychrom` (branch `main`).
+
+- **fg/bg detection is geometric, not semantic**
+  (`src/ui/services/figma/find-fg-and-bg-nodes.ts`): flatten the node tree, sort
+  by depth + paint (z) order; the **selected** node is foreground, the nearest
+  underlying intersecting node is background.
+- Fill extraction (`get-node-fills.ts`) + blend/opacity compositing
+  (`blend/blend-colors.ts`) run **before** APCA, because the effective background
+  may be a stack of semi-transparent fills.
+- APCA score + a **conclusion table** (`conclusion.ts`) map Lc → readability
+  tier. We adopt this pattern for the "contrast of current selection" readout.
+- **Thread placement:** node traversal/intersection/fill extraction must happen
+  in the **sandbox** (needs `figma`); the composited fg/bg colors cross the
+  bridge to the UI, which runs APCA and renders the verdict.
+
+### 2.4 Radix custom palette generator — opaque + alpha pairing
+
+Source: `radix-ui/website` `components/generate-radix-colors.tsx`.
+
+- For each opaque step it derives a matching **alpha** color by reversing the
+  compositing equation `target = bg·(1−α) + fg·α`: solve per-channel α, take the
+  max, back-solve the fg channels, and apply per-channel rounding correction
+  (browsers composite each channel independently).
+- We borrow **the alpha-derivation algorithm**, not the scale-interpolation. Our
+  palette is authored in okLCH (not interpolated from Radix reference scales), but
+  each opaque Base Token gets a companion **alpha variant** so consumers get the
+  same opaque/alpha pairing the author already uses in `@saeris/ui`.
+- **Decided:** alpha is always **derived** from the opaque value over a
+  **user-defined background** — never hand-tweaked. **Deferred** past v1, but the
+  data model and export are designed to accommodate it (generated as separate
+  bindable Variables, so they're usable in Figma, and emitted into the export's
+  alpha block per §2.13). `@saeris/colors` confirms the background convention:
+  light over `#fff`, dark over `#111`.
+
+### 2.5 APCA & the typography discipline
+
+Sources: `Myndex/apca-w3`, APCA Readability Criterion (readtech.org/ARC).
+
+- **APCA is not a ratio.** `Lc = APCAcontrast(sRGBtoY(text), sRGBtoY(bg))`, output
+  ≈ **±108**. Sign encodes polarity (dark-on-light positive, light-on-dark
+  negative); magnitude is the lightness contrast.
+- Key constants (from `apca-w3`): `mainTRC 2.4`; luminance coeffs
+  `0.2126729 / 0.7151522 / 0.0721750`; black soft-clamp `blkThrs 0.022`,
+  `blkClmp 1.414`; polarity exponents `normBG 0.56 / normTXT 0.57`,
+  `revBG 0.65 / revTXT 0.62`; `scale 1.14`; low-contrast `loOffset 0.027`,
+  `loClip 0.1`.
+- **The font lookup table is the point.** A raw Lc only becomes meaningful against
+  font size + weight:
+  - **Lc 90** — preferred max; large/bold body, large color areas.
+  - **Lc 75** — minimum for body/column text (≈ 24px/300, 18px/400, 16px/500,
+    14px/700). Add **+15** to any table value below 75 for body use.
+  - **Lc 60** — non-body content text.
+  - **Lc 45** — large/headline text (36px/400 or 24px/bold).
+  - **Lc 30** — non-text (UI elements, borders).
+  - **Lc 15** — incidental / disabled.
+- **WCAG 2.x** (flat 4.5:1 normal, 3:1 large/UI) is also computed, for teams that
+  still certify against AA. We show **both**, clearly labeled, and never average
+  them (per `CLAUDE.md` Rule 7).
+- **Implementation:** colorjs.io provides both APCA and WCAG21 (§2.9), so we don't
+  separately depend on `apca-w3`. The **font-lookup table** (Lc → min size/weight)
+  is *data*, not algorithm — we vendor it as a small typed table in `src/ui`.
+
+### 2.6 contrast.tools — the grid
+
+A matrix of every palette color against every other, each cell showing the
+contrast verdict, filterable by the typography context (font size + weight). This
+is the visualization that turns "what's the contrast of A on B" into "**which
+pairings are valid for 16px medium body text**" at a glance — exactly the
+at-a-glance validation goal. We render this in the UI from the palette + the APCA
+font lookup; no new sandbox data is needed beyond the palette itself.
+
+### 2.7 Figma Variables — the persistence substrate
+
+Source: developers.figma.com plugin API docs.
+
+- Under `dynamic-page` use the **async** getters: `getLocalVariablesAsync`,
+  `getVariableByIdAsync`, `getVariableCollectionByIdAsync`.
+- `createVariableCollection(name)`, `collection.addMode(name)` / `modeId` /
+  `defaultModeId`; `createVariable(name, collection, "COLOR")`.
+- `variable.setValueForMode(modeId, { r, g, b, a })` — **RGBA as 0–1 floats**,
+  **sRGB**. `variable.valuesByMode` reads them back.
+- `variable.setVariableCodeSyntax(platform, string)` for `WEB | ANDROID | iOS` —
+  **this is where we stash canonical `oklch(L C H)`.**
+- `createVariableAlias(variable)` for the alias layers consumers build on top.
+- No documented hard cap on modes per collection (plan/UI limits aside).
+
+**Persistence model (the central design decision).** Each color Variable carries
+two fields per mode — the rendered RGBA and the canonical okLCH:
+
+```
+Variable "color/red/500", mode "light":
+  valueForMode(light) = { r,g,b,a }            ← sRGB float, gamut-mapped; what Figma renders
+  codeSyntax.WEB       = "oklch(0.62 0.21 25)"  ← canonical source of truth
+```
+
+On load we read `codeSyntax.WEB`, parse okLCH → authoritative state. On edit we
+write **both** fields. The RGBA is *derived* and **perceptually gamut-mapped**
+(colorjs.io `toGamut({ method: "css" })`, binary-search chroma reduction in OKLCH —
+not naïve clipping), so the two can intentionally diverge — we preserve intent in
+okLCH and render the closest in-gamut color.
+
+```mermaid
+flowchart LR
+  subgraph Variable["Figma color Variable (per mode)"]
+    CS["codeSyntax.WEB<br/>oklch(L C H) — source of truth"]
+    RGBA["valueForMode<br/>{ r,g,b,a } sRGB — what Figma renders"]
+  end
+  CS -- "load: parse" --> State["okLCH editor state"]
+  State -- "edit: toGamut(css)" --> RGBA
+  State -- "edit: serialize" --> CS
+```
+
+> **Note (see §2.14):** the okLCH source of truth is conceptually a DTCG token's
+> `$extensions` payload. Code syntax is the *Figma-native carrier* for it today; if
+> Figma's native DTCG export matures to round-trip `$extensions`, that becomes the
+> cleaner home. Either way the model is DTCG; this is the storage mechanism.
+
+**Document color profile (confirmed).** `figma.root.documentColorProfile` returns
+`"LEGACY" | "SRGB" | "DISPLAY_P3"`. New files default to **sRGB**. Variable color
+values are `{ r, g, b, a }` 0–1 floats regardless of profile; the profile governs
+how Figma *interprets/renders* them. So our plan:
+
+- **Gamut target follows the document profile (decided).** Read
+  `documentColorProfile` on launch (and on change). When the document is **Display
+  P3**, gamut-map against **P3** (more headroom). Otherwise (`SRGB`/`LEGACY`), map
+  against **sRGB**. Surface a hint reflecting which is active.
+- **Profile changes are safe because okLCH is the source.** Our okLCH in
+  `$extensions`/code syntax is never touched by a profile switch — Figma re-maps the
+  *rendered* appearance on its side, and we re-derive `$value` from the preserved
+  okLCH against the new active gamut. So switching P3 → sRGB simply tightens the
+  target; no data is lost.
+- If a color is out of the *active* gamut, show Huetone's gamut warning on that
+  swatch and shade the chart accordingly.
+- **⚠ OPEN:** exact UI for the warning + whether to offer a P3-vs-sRGB preview
+  toggle independent of the document setting.
+
+### 2.8 Modern CSS color (UI rendering)
+
+The UI iframe is a recent Chromium, so we have a narrow modern target:
+
+- `oklch(L C H / α)` is **Baseline widely available** (since 2023). L 0–1, C 0–~0.4
+  (100% = 0.4), H degrees.
+- We can render swatches directly in okLCH and let the browser do the work; for the
+  *Figma value* we still down-convert + gamut-map to sRGB ourselves.
+- `light-dark()` and `color-scheme` are available but **mode is driven by Figma's
+  variable modes, not the OS** — so the UI's own theming uses `--figma-color-*`,
+  while the *previewed palette* renders whichever Figma mode the user is editing.
+
+### 2.9 colorjs.io — the color engine
+
+We use [`colorjs.io`](https://colorjs.io) — the most rigorously researched
+color-space library available (Lea Verou / Chris Lilley, the same lineage as the
+CSS WG functions Huetone already vendors). It gives us, in one dependency, every
+piece of color math the plugin needs:
+
+- **Conversions:** okLCH ↔ sRGB ↔ Display P3 (`to("oklch")`, `to("srgb")`,
+  `to("p3")`).
+- **Gamut:** `inGamut("srgb" | "p3")` for the per-swatch flag/warning;
+  `toGamut({ method: "css" })` for **perceptual** mapping (binary-search chroma
+  reduction in OKLCH) — the right default, not clipping.
+- **Contrast:** built-in **APCA** and **WCAG21** algorithms, so we don't separately
+  vendor `apca-w3` unless we need the font-lookup table specifically (which is data,
+  not algorithm — see §2.5).
+- **Bundle:** the **procedural `colorjs.io/fn` API is tree-shakeable**; we import
+  only `to`, `inGamut`, `toGamut`, and the contrast fns to keep the single-file UI
+  bundle small. All of this is pure math → lives in the **UI thread**.
+
+This supersedes the v0.1 "culori vs. CSS-WG" open question — **decided: colorjs.io.**
+
+### 2.10 React Aria — the control layer (and the okLCH constraint)
+
+The UI is built on **React Aria** (unstyled, accessible primitives), styled to match
+Figma and organized with Adobe-Lightroom-like utility/density.
+
+**Critical constraint discovered in research:** React Aria's `Color` object and
+`parseColor` support only **rgb / hsl / hsb / hex — not okLCH/lch**. So we do **not**
+drive the high-level `ColorSlider` / `ColorArea` / `ColorWheel` with our okLCH state.
+We build our own, holding okLCH state ourselves while inheriting React Aria's
+accessibility primitives.
+
+**Two complementary controls — not one.** The author's reference is desktop Adobe
+Lightroom's **Color Mixer** (the per-channel Hue / Saturation / Luminance sliders,
+each with a precise editable number input — *not* Lightroom Classic or Web). We pair
+that with Huetone's histograms; they do different jobs and we keep both:
+
+| Control | Built on | Job |
+| --- | --- | --- |
+| **Per-channel sliders** (Lightroom-style) | React Aria **`useMove`** (the accessible pointer+keyboard drag primitive `useColorSlider` itself uses) + a paired **`useNumberField`** for exact entry | **Precision** — adjust L, C, or H of one swatch to an exact value. |
+| **Per-channel histograms** (Huetone-style) | canvas (see §2.4 chart row) | **Context** — visualize the **valid gamut range** for the channel *and* show how this swatch relates to its **sibling values across the ramp** (the whole row/column at once). |
+
+So a swatch editor shows: the histogram (where am I in the valid range, relative to
+my siblings?) above/beside the slider+number trio (nudge me to an exact value). We
+use **stock** React Aria color components only where their native model fits — a hex
+`ColorField` for paste-in, `ColorSwatch` for static previews.
+
+This closes the "which color components" question and explains why neither a stock
+`ColorArea` nor a single slider type is sufficient.
+
+### 2.11 Form architecture — RHF + Valibot, composed Ariakit-style
+
+Form-shaped UI (swatch editors, grid axis config, export options) needs both
+robustness and composition ergonomics. We get them from **RHF + Valibot** with a
+**home-grown context layer** — **Ariakit is a DX reference, not a dependency.**
+
+- **State + validation (the engine):** **React Hook Form** for state/subscriptions,
+  **Valibot** schemas for validation and **type inference**, wired via
+  `@hookform/resolvers` (`valibotResolver`). The **Valibot schema's output type is
+  the single source of truth** for the form's value shape (e.g. an okLCH triple with
+  channel bounds, a grid-axis config).
+- **Composition (the ergonomics we port from Ariakit):** a context `Form` provider
+  plus field components (`Field`, `Label`, `Error`, and an abstract `Control` that
+  does *not* assume native `value`/`onChange`, for wrapping our `useMove`-based
+  okLCH sliders). Components attach to form state by a **`name` prop** rather than
+  prop-drilling `value`/`onChange`. Internally `Control` wraps RHF's
+  `useController`; field-scoped reads wrap `useWatch`.
+- **The load-bearing DX detail — a typed `names` proxy.** Ariakit exposes
+  `form.names` (a proxy where `form.names.season` *is* the string `"season"` but is
+  **typed** to that field) and `form.useValue(form.names.season)`. We reproduce this
+  over RHF, **derived from the Valibot output type**, so:
+  - `name={form.names.swatch.l}` is **type-checked** — a wrong/renamed path is a
+    compile error, not a silently detached field (the failure mode of bare string
+    `name="..."` props).
+  - VSCode **rename-symbol** on a schema key cascades to every `name=` reference.
+
+  The author uses this exact pattern (the Ariakit version) in
+  [`Saeris/anime-search`](https://github.com/Saeris/anime-search/blob/main/src/app/(search)/page.tsx)
+  — that's the **target DX**, but built on RHF here.
+- **⚠ This is a genuine R&D spike, not a one-shot.** A recursive typed-path proxy
+  that matches Valibot's inferred output (nested objects, arrays) and wires cleanly
+  to RHF's `useController`/`useWatch` will take iteration to get right. We isolate it
+  as `src/ui/form/` utilities with their own unit/type tests before building real
+  forms on top.
+
+### 2.12 The grid is user-configurable (Harmonizer-style)
+
+Both Huetone and [Harmonizer](https://github.com/evilmartians/harmonizer) treat the
+palette grid's axes as **user data**, and so do we:
+
+- **Y axis = color names** → Figma variable **groups** (the `red` / `orange` / …
+  name prefixes). **X axis = scale steps** → token **names** (`25 … 950`).
+- The user can **add / remove / reorder** rows and columns and rename them, with UX
+  drawn from Figma's [auto-layout grid flow](https://help.figma.com/hc/en-us/articles/31289469907863)
+  (inline rename, drag-reorder) and Lightroom-like panel organization.
+- We **seed** a Tailwind/Radix-style default scale (e.g. `50,100…900,950`) so a
+  fresh palette **maps directly onto Shadcn/Tailwind** out of the box.
+- The plugin therefore owns a small **palette-config model** — ordered group names,
+  ordered scale names, the set of modes — that *projects onto* Figma variable
+  names + modes. Renaming a column renames the corresponding variables; reordering
+  is metadata. **⚠ OPEN:** where this config lives (plugin data on the collection
+  vs. derived purely from variable names) — ties into open question §6.5.
+
+### 2.13 Export workflow — match `@saeris/colors`
+
+The proven end-to-end lifecycle is **Figma → CSS tokens → NPM package → app**. Our
+plugin owns the first hop; the export must emit the *shape*
+[`@saeris/colors`](https://github.com/Saeris/colors)'s `src/generate.ts` produces,
+so it drops straight into a Tailwind + Shadcn project:
+
+- One file per color (or one combined file), `:root` custom properties.
+- Opaque: `--{name}-{step}: <value>;` Alpha: `--{name}-a{step}: <value>;`
+- Alpha values as `oklch(...)`, with a Display-P3 upgrade inside
+  `@supports (color: color(display-p3 …)) { @media (color-gamut: p3) { … } }`.
+- Light/dark via a `.dark` selector block; alpha blends the fg over `#fff` (light)
+  / `#111` (dark) — see §2.4 / §6.3.
+
+This makes the export a first-class v1 feature, not an afterthought, and reuses the
+alpha-derivation math from §2.4 when that phase lands.
+
+### 2.14 DTCG — the canonical internal model
+
+The plugin's **single source of truth is a [DTCG](https://www.designtokens.org/tr/drafts/format/)
+(Design Tokens Community Group) token tree**, not a bespoke `PaletteSnapshot`. Every
+other representation — Figma Variables, the editor UI state, and all export targets —
+is a **projection of, or transform from, this tree.** This is the "good internal
+format → easy exports" the author predicted.
+
+Why DTCG specifically:
+
+- **It already solves precision.** The DTCG `color` type's canonical value is
+  `{ "colorSpace": "srgb" | "display-p3", "components": number[], "alpha"?, "hex"? }`
+  — **continuous channel values, not hex-only.** That's the structural fix for
+  Huetone's lossy hex round-trip, standardized.
+- **okLCH lives in `$extensions`.** okLCH isn't yet a first-class DTCG `colorSpace`
+  (the spec's color spaces are RGB-family). So `$value` holds the DTCG `srgb`/`p3`
+  representation that Figma and other tools understand, and the **canonical okLCH
+  triple lives in `$extensions["io.saeris.huetone".oklch]`** (reverse-domain key;
+  the spec *requires* tools to preserve extension data they don't understand). We
+  keep the perceptual source **and** stay interoperable.
+- **Aliases map 1:1 to Figma.** DTCG references (`{group.token}` curly-brace syntax)
+  correspond directly to Figma variable aliases — which validates the author's
+  layered vision end to end: our **Base Tokens** are concrete DTCG `color` tokens;
+  consumers' **Alias / Scoped / Pattern** layers are DTCG references over them.
+- **Figma is moving to native DTCG export.** Aligning our model to DTCG means we
+  *ride the emerging standard* rather than inventing a private one, and it future-
+  proofs interop with Style Dictionary, Tokens Studio, etc.
+
+**Where things sit:**
+
+| Layer | Representation |
+| --- | --- |
+| Canonical model | DTCG token tree: groups (color names) → tokens (scale steps), `$type: "color"`, `$value` = DTCG color, `$extensions….oklch` = source |
+| Figma (persistence) | Variables: `$value`→ gamut-mapped RGBA `valueForMode`; `$extensions.oklch`→ code syntax (§2.7); aliases→ variable aliases |
+| Editor (UI state) | okLCH read from `$extensions`; RHF/Valibot forms validate edits back into the tree |
+| Export | Transforms of the tree → `@saeris/colors` CSS (§2.13), Tailwind/Shadcn, Style Dictionary, raw DTCG JSON |
+
+**⚠ OPEN** (refine while building): the exact `$extensions` key/shape; whether the
+grid-axis config (§2.12) lives in a group-level `$extensions` block; how much of
+DTCG we model in v1 vs. grow into (we only need `color` + groups + aliases now).
 
 ---
 
-## 5. Build & tooling architecture (Vite+)
+## 3. Goals & Non-Goals
 
-Verified against the bundled docs (`node_modules/vite-plus/docs`) and by **empirically
-probing `vp`** (§5.4).
+### Goals (v1)
+- Read/render a managed **Base Tokens** color collection as a Huetone-style
+  hue-group × tone grid, across Figma **modes**.
+- Live, two-way editing of swatches → Figma Variables, with okLCH persisted in code
+  syntax (lossless round-trip).
+- Per-channel **okLCH valid-range charts** (the Huetone editing experience).
+- **APCA (Lc) + WCAG** contrast for any pair, with the **font lookup** turning Lc
+  into pass/fail per weight+size.
+- **Contrast of current selection** (Polychrom-style) in the contrast display.
+- **Contrast grid** (contrast.tools-style) filterable by typography context.
+- **User-configurable grid axes** (add/remove/reorder/rename groups and scales),
+  seeded with a Tailwind/Radix-style default (§2.12).
+- **CSS-token export** matching the `@saeris/colors` shape (§2.13).
 
-### 5.1 Key Vite+ facts
+### Deferred (post-v1, but designed for)
+- **Alpha variant** generation paired to each opaque Base Token (Radix approach,
+  §2.4). The screenshot's opaque+alpha grid is the eventual target; alpha is always
+  *derived* from the opaque values over a user-defined background — never
+  hand-tweaked. We design the model to accommodate it but don't build it in v1.
 
-- `vp build` runs the **standard Vite production build** — config model identical to
-  upstream Vite (Vite 8 + Rolldown): `build`, `plugins`, `rollupOptions`, `--mode`,
-  `--watch` all behave as documented.
-- `vp pack` is **tsdown / library-only** — dropped (a plugin is not a library).
-- **You cannot override `build`/`dev` via `package.json` scripts.** Bare `vp build`
-  always runs the built-in Vite build; orchestration must live in **`run.tasks`** in
-  `vite.config.ts`, reached via `vp run build`. A task name cannot exist in both
-  `package.json` and `vite.config.ts`.
+### Non-Goals (v1)
+- Generating the full Alias / Scoped / Pattern token layers — we only *enable*
+  consumers to build them on our Base Tokens (we don't author them).
+- The disciplined multi-collection system from `@saeris/ui` end-to-end — that's
+  context for *how values get used*, not v1 scope.
+- Importing arbitrary external palettes / Huetone permalinks (possible later).
+- Publishing automation beyond what the template's CI already does.
 
-### 5.2 One config, not two
+---
 
-The two Figma artifacts have **mutually incompatible build settings**:
+## 4. Architecture & Thread Placement
 
-- **UI** needs `viteSingleFile()`, which _globally_ mutates the build
-  (`inlineDynamicImports`, `cssCodeSplit: false`, huge `assetsInlineLimit`) and expects
-  an HTML input.
-- **Sandbox** must be a single plain JS file (no HTML, no DOM), ES2020, IIFE (lib mode).
+```mermaid
+flowchart TB
+  subgraph main["src/main — sandbox (figma, no DOM)"]
+    direction TB
+    M1["Discover/create managed Base Tokens collection + modes"]
+    M2["Read variables ↔ DTCG token tree (§2.14):<br/>$value = RGBA · $extensions.oklch = code syntax · aliases = var aliases"]
+    M3["Write edits: setValueForMode(rgba) + setVariableCodeSyntax"]
+    M4["Selection → traverse tree, extract + composite fg/bg fills"]
+  end
 
-One `vp build` invocation applies one plugin/build config to all inputs, so the
-collision (not input count) forces **two passes** — but both live in one
-`vite.config.ts` that branches on `--mode`. The actual config also relaxes one lint rule
-via `mergeLint` (§6.5):
+  subgraph ui["src/ui — iframe (DOM + React Aria, no figma)"]
+    direction TB
+    U1["Canonical DTCG tree → okLCH editor state"]
+    U2["okLCH ↔ sRGB/P3 + gamut map + APCA/WCAG (colorjs.io/fn)"]
+    U3["APCA font-lookup table (data) → typography pass/fail"]
+    U4["Dual control: Lightroom sliders (useMove) + Huetone histograms"]
+    U5["Contrast display · contrast grid · configurable axes · export"]
+    U6["Forms: RHF + Valibot + home-grown typed-names utils (§2.11)"]
+  end
+
+  ui -- "call: editToken, addMode, axis edits, exportTokens" --> main
+  main -- "emit: tokensChanged, selectionContrastChanged" --> ui
+
+  main -.->|"typed IPC bridge (contract.ts)<br/>structured-clonable JSON only"| ui
+```
+
+### Proposed contract additions (illustrative — names to be finalized)
+
+The bridge payloads are **DTCG-shaped** (§2.14): a `TokenTree` is the DTCG color
+group tree (structured-clonable plain JSON — DTCG *is* JSON, so it crosses the
+bridge as-is).
 
 ```ts
-const lintConfig = mergeLint(lint, { rules: { "require-await": "off" } });
+// Procedures (UI calls, main handles)
+ensurePaletteCollection: (input: { name: string }) => { collectionId: string };
+readTokens:    () => TokenTree;                       // DTCG color tree + groups + aliases
+getColorProfile: () => "LEGACY" | "SRGB" | "DISPLAY_P3";
+editToken:     (input: { path: string; modeId: string;
+                         oklch: [number, number, number]; alpha?: number }) => void;
+addMode:       (input: { name: string }) => { modeId: string };
+// Grid axis edits (§2.12) — project onto DTCG groups/tokens → Figma variable names
+addGroup / removeGroup / renameGroup / reorderGroups: (…) => void;
+addScale / removeScale / renameScale / reorderScales: (…) => void;
+exportTokens:  (input: { format: "dtcg" | "css-saeris" | "tailwind";
+                         background?: { light: string; dark: string } })
+                 => { files: { name: string; contents: string }[] };  // §2.13 (transforms of TokenTree)
+getSelectionContrast:  () => SelectionContrast | null;
+// Deferred: generateAlphaVariants (§2.4) — designed for, not in v1.
 
-export default defineConfig(({ mode }) => {
-  const base = {
-    lint: lintConfig,
-    fmt,
-    test: {
-      /* node env, no DOM/figma */
-    },
-    run: {
-      tasks: {
-        /* §5.3 */
-      }
-    }
-  };
-  if (mode === "main")
-    return {
-      ...base,
-      build: {
-        outDir: "dist",
-        emptyOutDir: false,
-        target: "es2020",
-        lib: {
-          entry: "src/main/code.ts",
-          formats: ["iife"],
-          name: "figmaPluginMain",
-          fileName: () => "code.js"
-        },
-        rollupOptions: { output: { inlineDynamicImports: true } }
-      }
-    };
-  if (mode === "ui")
-    return {
-      ...base,
-      root: "src/ui",
-      plugins: [react(), viteSingleFile()],
-      build: {
-        outDir: "../../dist",
-        emptyOutDir: false,
-        target: "esnext",
-        cssCodeSplit: false,
-        assetsInlineLimit: 100_000_000,
-        chunkSizeWarningLimit: 100_000_000,
-        rollupOptions: { output: { inlineDynamicImports: true } }
-      }
-    };
-  // any other mode (notably `vp test`, which runs mode "test"): base only — no UI root,
-  // or Vitest won't discover src/__tests__.
-  return base;
-});
+// Events (main emits, UI consumes via eventSignal)
+tokensChanged:             TokenTree;
+selectionContrastChanged:  SelectionContrast | null;
 ```
 
-### 5.3 Tasks orchestrate the two passes
+`TokenTree` and `SelectionContrast` are plain, structured-clonable records.
+Per `CLAUDE.md`, every addition here gets coverage in the contract test.
 
-```ts
-run: {
-  tasks: {
-    lint:         { command: "vp lint", input: ["src/**", "vite.config.ts"] },
-    "build:main": { command: "vp build --mode main", input: ["src/main/**","src/ipc/**","vite.config.ts"], output: ["dist/code.js"] },
-    "build:ui":   { command: "vp build --mode ui",   input: ["src/ui/**","src/ipc/**","vite.config.ts"],   output: ["dist/index.html"] },
-    manifest:     { command: "node ./scripts/manifest.mjs", input: ["figma.manifest.ts","scripts/manifest.mjs"], output: ["dist/manifest.json"] },
-    build:        { command: ["vp run build:main", "vp run build:ui", "vp run manifest"], dependsOn: ["lint"] },
-    dev:          { command: ["vp build --mode main --watch", "vp dev --mode ui"], cache: false },
-  }
-}
+---
+
+## 5. Phased Implementation Plan
+
+Each phase ends green on `vp check` (0/0) + `vp test` + `vp run build`, and is
+independently reviewable.
+
+- **Phase 0 — Foundations.** Rebrand the template (manifest, package; working name
+  only). Add deps: **colorjs.io** (confirm not age-gated), **React Aria**, **RHF**,
+  **Valibot** + resolver. Establish (a) the okLCH ↔ sRGB/P3 + gamut module over
+  `colorjs.io/fn` and (b) the **DTCG `TokenTree` model + Valibot schema** in
+  `src/ui`, both with unit tests (round-trip, gamut-map, DTCG↔okLCH `$extensions`).
+  *No Figma I/O yet.*
+
+- **Phase 0.5 — Form utilities spike (§2.11).** Build and test the home-grown RHF
+  utilities: context `Form`, field `Control`, and the **typed `names` proxy derived
+  from a Valibot schema**. Isolated in `src/ui/form/` with type-level tests. Flagged
+  R&D — gate before building real forms on it. *(Can run parallel to Phase 1.)*
+
+- **Phase 1 — Persistence spine.** Contract + sandbox handlers to discover/create
+  the Base Tokens collection, read `documentColorProfile`, read variables into a
+  **DTCG `TokenTree`**, and round-trip a single token edit (RGBA `$value` + okLCH
+  `$extensions` via code syntax). Prove **lossless okLCH** with a test. De-risks the
+  central decision before rich UI.
+
+- **Phase 2 — Ramp grid + numeric editing.** Render the group × scale grid for the
+  active mode; edit a token by typed okLCH values (Phase-0.5 form utils); live update
+  to Figma. Mode switching. Per-swatch gamut warning.
+
+- **Phase 3 — Configurable axes.** Add/remove/reorder/rename groups and scales
+  (Figma-grid-flow UX), seeded with the Tailwind/Radix default scale; project edits
+  onto DTCG groups → Figma variable names. (Can land alongside or just after Phase 2.)
+
+- **Phase 4 — Dual color control.** Lightroom-style per-channel **sliders**
+  (`useMove` + `useNumberField`) **and** Huetone per-channel **histograms** (valid
+  range + sibling-ramp context), per §2.10. (Highest UI effort; decide worker vs.
+  main-thread render for the histograms — *lean main-thread*.)
+
+- **Phase 5 — Contrast engine + display.** APCA (Lc) + WCAG (colorjs.io) + the APCA
+  **font-lookup table**; contrast display; **selection contrast** (sandbox
+  traversal + blend compositing → UI verdict, Polychrom-style).
+
+- **Phase 6 — Contrast grid.** contrast.tools-style matrix, filterable by font
+  size/weight, from the palette + font lookup.
+
+- **Phase 7 — Export transforms.** Emit from the canonical `TokenTree`: raw **DTCG
+  JSON** + the **`@saeris/colors` CSS** shape (§2.13) for Tailwind/Shadcn. (Opaque
+  only in v1; alpha block when the deferred alpha phase lands.)
+
+- **Phase 8 — Polish & ship.** Empty states, errors, performance on large palettes,
+  manifest/publish prep per `figma-plugin-publishing`. **Real name** chosen here.
+
+- **Deferred — Alpha variants.** Radix-style derivation (§2.4) paired to each opaque
+  token over a user-defined background; generated as bindable Variables and added to
+  the export's alpha block.
+
+---
+
+## 6. Open & Resolved Questions
+
+### Resolved (through v0.3)
+- **Canonical model** → **DTCG token tree** (§2.14); Figma/UI/exports all project
+  from it. okLCH source in `$extensions`; aliases ↔ Figma variable aliases.
+- **Color library** → **colorjs.io** (`/fn` tree-shakeable), supersedes culori.
+- **Contrast** → colorjs.io's APCA + WCAG21; APCA font-lookup as bundled data.
+- **UI controls** → React Aria. **Two complementary controls:** Lightroom-style
+  per-channel sliders (on `useMove` + `useNumberField`, since React Aria's `Color`
+  can't carry okLCH) **and** Huetone per-channel histograms (valid range + sibling
+  ramp). Keep both (§2.10).
+- **Forms** → RHF + Valibot, **home-grown** context utils + typed `names` proxy;
+  **Ariakit is a reference, not a dependency** (§2.11).
+- **Grid axes** → user-configurable (groups × scales), seeded Tailwind/Radix.
+- **Alpha** → derived-only, deferred past v1, designed-for.
+- **Out-of-gamut** → perceptual `toGamut({method:"css"})`, preserve okLCH intent,
+  show warning.
+- **Gamut detection + target** → `figma.root.documentColorProfile`; map to **P3
+  when the document allows it**, else sRGB. okLCH source is untouched by a profile
+  switch, so the target can follow the profile live (re-derive `$value`).
+- **Export scope** → deferred; with DTCG as truth, targets are just transforms — easy
+  to add late. v1 emits raw DTCG JSON + `@saeris/colors` CSS.
+
+### Still open (decide while building / iterate)
+1. **Form-utils typed-`names` proxy** (Phase 0.5): the recursive proxy ↔ Valibot
+   output-type wiring is genuine R&D; budget iteration before forms depend on it.
+2. **`$extensions` shape** (Phase 0/1): exact reverse-domain key + okLCH payload
+   shape; whether grid-axis config lives in a group-level `$extensions` block.
+3. **Histogram rendering** (Phase 4): worker pool vs. main-thread canvas in the
+   single-file UI build. *Lean: main-thread first.*
+4. **Out-of-gamut UI** (Phase 2+): exact warning treatment; optional P3-vs-sRGB
+   preview toggle independent of the document profile.
+5. **Palette identity / config storage** (Phase 1/3): plugin data on the collection
+   vs. derive purely from DTCG group/variable names + order. *Lean: plugin-data
+   marker for identity + config, names as the human-facing projection.*
+6. **Real product name** (Phase 8): cannot ship as "Huetone". Deferred by choice.
+
+---
+
+## 7. References
+
+- Huetone — https://github.com/ardov/huetone
+- Polychrom — https://github.com/evilmartians/figma-polychrom
+- Radix color gen — https://github.com/radix-ui/website/blob/193594859f9847770e7defe04dc579559dd4b343/components/generate-radix-colors.tsx
+- contrast.tools — https://contrast.tools/
+- APCA — https://github.com/Myndex/apca-w3 · https://www.readtech.org/ARC/
+- Figma Variables API — https://developers.figma.com/docs/plugins/api/figma-variables/
+- Figma DocumentNode (color profile) — https://developers.figma.com/docs/plugins/api/DocumentNode/
+- CSS `oklch()` — https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/oklch
+- colorjs.io — https://colorjs.io (gamut mapping: https://colorjs.io/docs/gamut-mapping)
+- DTCG token format — https://www.designtokens.org/tr/drafts/format/
+- React Aria color + `useMove` — https://react-aria.adobe.com/Color · https://react-aria.adobe.com/useMove
+- Adobe Lightroom Color Mixer (control reference, desktop) — slider + number per channel
+- Ariakit Form (DX reference, not a dep) — https://ariakit.org/components/form
+- Anime Search form (target `form.names` DX) — https://github.com/Saeris/anime-search/blob/main/src/app/(search)/page.tsx
+- React Hook Form + Valibot — https://react-hook-form.com · https://valibot.dev
+- Harmonizer — https://github.com/evilmartians/harmonizer
+- `@saeris/colors` (export target) — https://github.com/Saeris/colors
+- `@saeris/ui` token architecture — https://www.figma.com/design/FafgXG0tR6ahMUYqS85hyv/-saeris-ui
+- Author's multi-collection token architecture — https://www.tldraw.com/f/J95uMg4ql5CzfiyIYU9ts
 ```
-
-- Users run **`vp run build`** / **`vp run dev`** (not bare `vp build`).
-- **Per-pass `input`/`output`** is a real DX win unique to the Vite+ task graph: editing
-  UI code is a **cache hit on the sandbox build**, and vice-versa (confirmed: a second
-  `vp run build` reports `4/4 cache hit`). Two separate config files couldn't provide this.
-- `dependsOn` references **task names**, so a `lint` task exists for `build` to depend on
-  (a bare command can't be a dependency target).
-- `manifest` runs `scripts/manifest.mjs`, which imports the typed `figma.manifest.ts`
-  (Node ≥22.18 strips types natively) and writes `dist/manifest.json`.
-
-### 5.4 Empirical verification
-
-`vp` was probed directly rather than assumed:
-
-- **`defineConfig(({ mode, command }) => ({...}))` function form is supported** (probe
-  printed `mode=ui command=build`).
-- **`--mode` plumbs through** to the function config.
-- **`vp test` runs with `mode === "test"`**, which is why the config's non-build branch
-  must omit the UI `root` (else Vitest can't find `src/__tests__`).
-- **`root: "src/ui"` + HTML entry builds correctly**; `viteSingleFile()` then inlines the
-  emitted JS/CSS into one `index.html`.
-
----
-
-## 6. IPC bridge — the headline feature
-
-Both official samples and `create-figma-plugin` expose messaging as an **untyped or
-cast-based event channel**. This template ships a **tRPC-like, type-safe bridge**,
-modeled on **`@discordkit/electron`**
-(`C:\GitHub\@saeris\discordkit`, PR [#60](https://github.com/discordkit/discordkit/pull/60)).
-
-> **Why Electron's pattern ports here:** Electron and Figma plugins are the _same
-> problem_ — a privileged process (Electron main / Figma sandbox) and a sandboxed UI
-> (renderer / iframe) exchanging only structured-clonable messages. DiscordKit's
-> insight — _don't expose the raw emitter; expose a typed `call`/`on` bridge and project
-> state as Signals_ — transfers almost 1:1.
-
-### 6.1 The layers (as built, `src/ipc/`)
-
-- **`contract.ts`** — the single source of truth: `Procedures` (request→reply) and
-  `Events` (push). Everything else is generic over it; growing the plugin's API means
-  editing only this file.
-- **`bridge.ts`** — the typed surface: `UiBridge` (`call`/`on`) and `MainBridge`
-  (`handle`/`emit`), built over a channel-injected transport.
-- **`transport.ts`** — the correlation-id request/reply protocol (§6.2) plus the runtime
-  `Envelope` guard; transport-agnostic (tests inject a fake `Channel`).
-- **`channel.main.ts` / `channel.ui.ts`** — the thread-specific `Channel` adapters
-  (`figma.ui` vs. `window`) and the `createMainBridge` / `createUiBridge` entry points.
-  Split by thread so the IPC core never references both global sets — the per-thread
-  tsconfig then enforces "no DOM in main, no figma in UI" at compile time.
-- **`signals.ts`** — `eventSignal` (push events → `Signal.State`), `asyncSignal`
-  (pull-only `call` reads → `{ loading, data, error }` with a monotonic stale-run
-  guard), and `subscribe` (framework-free watcher).
-- **`react.ts`** — `useSignal` via `useSyncExternalStore`.
-- **`disposable.ts`** — `Subscription` (an unsubscribe that's also `using`-compatible)
-  and `installDisposeShim` (§6.3).
-
-### 6.2 The one thing we invent: a correlation-id transport
-
-Electron has `ipcRenderer.invoke` (built-in request/reply). `postMessage` is
-fire-and-forget, so `call` adds a **correlation-id layer**: each request gets an id; the
-reply echoes it; the pending promise resolves on match. This is the only piece beyond
-DiscordKit's design.
-
-### 6.3 `using` / Explicit Resource Management — where it's safe
-
-- **UI thread** = a real browser iframe → `using` / `Symbol.dispose` fully supported.
-- **Main thread** = QuickJS, ES2020, `Symbol.dispose` not guaranteed. `code.ts` calls
-  `installDisposeShim()` at startup (seeds `Symbol.dispose`/`asyncDispose`) so `using`
-  resolves there too; `toSubscription` also defines the dispose method explicitly. Plain
-  `off()` always works regardless.
-
-`signal-polyfill` (v0.2.2, the TC39 Signals impl DiscordKit uses) works in both threads.
-
-### 6.4 Why this is the testable core
-
-The IPC contract is the one piece with **real logic worth unit-testing** (CLAUDE.md Rule
-9). `src/__tests__/contract.spec.ts` wires the two bridges through an in-memory fake
-`Channel` pair and asserts the guarantees: a `call` resolves with the handler's typed
-reply, a throwing handler rejects the caller, unknown procedures reject, events deliver
-typed payloads, subscriptions stop on disposal, and — the subtle one — `asyncSignal`'s
-**stale-run guard** discards a slow earlier reply when a newer `reload` supersedes it.
-11 tests, all passing.
-
-### 6.5 The type-erasure seam (and a lint conflict we hit)
-
-`unknown` must become a contract type _somewhere_; that seam is irreducible. It is
-contained to **two documented `oxlint-disable` casts** (one per thread side in
-`bridge.ts`/dispatch). Every other warning was resolved by improving the code — a
-runtime `Envelope` guard in the transport, `undefined` instead of `void` in conditional
-types, a `never`-typed handler map, dropping a default export. Final bar: **0 errors, 0
-warnings.**
-
-We also hit a genuine **`@saeris/configs` rule conflict**: `promise-function-async`
-forces thin promise-returning wrappers to be `async`, then `require-await` errors
-because they have no inner `await`, and `no-return-await` strips any `await` added to
-appease it. No source form satisfies all three, so `vite.config.ts` relaxes
-`require-await` via `mergeLint`, with a `TODO` to reconcile upstream (the config is
-shared across repos).
-
----
-
-## 7. UI layer
-
-- **React 19 + Vite**, bundled to a single inlined `index.html` via
-  `vite-plugin-singlefile`.
-- **No external Figma component library.** The intended pick, `figma-kit`, turned out to
-  be an **empty name-squat stub** (`0.0.0`, 0-byte dist, "Coming soon"); every other
-  React Figma UI lib (`figma-ui-kit`, `react-figma-ui`) is abandoned (2021–2023). The
-  only maintained option, `@create-figma-plugin/ui`, is Preact. So the template
-  **vendors a tiny set** (`Button`, `Input`) in `src/ui/components/`, styled with
-  `--figma-color-*` variables — which doubles as the seed for the future React-Aria
-  component library.
-- Theming uses `themeColors: true` + the `--figma-color-*` variables for automatic
-  light/dark/FigJam theming.
-
----
-
-## 8. Project structure (as built)
-
-```
-src/
-  main/
-    code.ts              # sandbox entry: showUI, installDisposeShim, register handlers, emit events
-    tsconfig.json        # ESNext lib, @figma/plugin-typings, no DOM
-  ui/
-    index.html
-    main.tsx             # React 19 mount (createRoot)
-    App.tsx              # "Hello Figma!" — typed call() + useSignal over an eventSignal
-    App.css              # --figma-color-* vars
-    components/          # vendored Figma-styled Button + Input (seed for the RA lib)
-    tsconfig.json        # DOM + react-jsx
-    vite-env.d.ts
-  ipc/
-    contract.ts          # the typed Procedures/Events contract (single source of truth)
-    bridge.ts            # UiBridge (call/on) + MainBridge (handle/emit)
-    transport.ts         # correlation-id request/reply + Envelope guard
-    channel.main.ts      # figma.ui channel + createMainBridge
-    channel.ui.ts        # window channel + createUiBridge
-    signals.ts           # eventSignal / asyncSignal / subscribe (signal-polyfill)
-    react.ts             # useSignal via useSyncExternalStore
-    disposable.ts        # Subscription + installDisposeShim
-  __tests__/
-    contract.spec.ts     # 11 tests over a fake Channel pair (reply, errors, events, stale-run guard)
-figma.manifest.ts        # single typed manifest source
-scripts/
-  manifest.mjs           # imports figma.manifest.ts → dist/manifest.json
-vite.config.ts           # one mode-branched config + run.tasks
-tsconfig.json            # root: IPC core + tests; src/main and src/ui have their own
-```
-
----
-
-## 9. CI/CD
-
-Figma has **no official publish API**. The community tool
-[`parrot-figcd`](https://github.com/opral/parrot-figcd) wrapped the private web API but
-was **archived Jan 2026** and breaks when Figma changes the endpoint. So:
-
-- **`ci.yml`** — `vp check` + `vp test` + `vp run build` on a Node matrix (the build
-  step means a broken build fails CI, not release).
-- **`release.yml`** — on a `v*` tag (or dispatch): build, then zip
-  `dist/{manifest.json, code.js, index.html}` into `plugin.zip` and attach it to a
-  GitHub Release. No npm/OIDC/Bumpy.
-- **Publishing to Figma Community stays a documented manual step** (desktop app).
-
----
-
-## 10. Authoring skills (`.claude/skills/`, original content)
-
-No plugin-authoring skill exists in the ecosystem (§4), so the template ships four:
-
-- **`figma-plugin-architecture`** — two-thread model, the typed bridge, the
-  add-a-feature workflow, pitfalls.
-- **`figma-plugin-api-reference`** — the `figma.*` surface (nodes, `createX`,
-  `loadFontAsync`, `notify`, `clientStorage`, dynamic-page async API, `showUI` options).
-- **`figma-plugin-publishing`** — manifest prep, review tips, the manual Community flow,
-  and why CI doesn't auto-publish.
-- **`figma-plugin-ui-theming`** — `themeColors`, the `--figma-color-*` variables,
-  light/dark, the vendored-components rationale.
-
-`.gitignore` ignores `.claude/*` but negates `.claude/skills/`, so committed skills are
-tracked while local agent state stays ignored.
-
----
-
-## 11. Decisions log
-
-| #   | Decision            | Choice                                                                         |
-| --- | ------------------- | ------------------------------------------------------------------------------ |
-| 1   | UI stack            | React 19 + Vite, single-file inlined                                           |
-| 2   | UI components       | **Vendor a tiny local set** (figma-kit is an empty stub; others abandoned)     |
-| 3   | Build tool          | Two-pass Vite via `vp run build`; dropped tsdown/`vp pack`/dts                 |
-| 4   | npm scaffolding     | Stripped (`exports`, `publishConfig`, `files`, `sideEffects`, OIDC, Bumpy)     |
-| 5   | CI/CD               | Check + test + build + zip GitHub Release artifact; manual Community publish   |
-| 6   | Skills              | Four original authoring skills                                                 |
-| 7   | Build config files  | **One** mode-branched `vite.config.ts` (no `vite.main.ts`/`vite.ui.ts`)        |
-| 8   | Build/dev override  | Via `run.tasks` (not `package.json` scripts)                                   |
-| 9   | Config branching    | `defineConfig(({ mode }) => …)` + `--mode` — empirically verified              |
-| 10  | Manifest generation | Separate cached `manifest` task running `scripts/manifest.mjs`                 |
-| 11  | IPC architecture    | tRPC-like typed bridge + Signals + `using`, ported from `@discordkit/electron` |
-| 12  | Lint conflict       | `require-await` relaxed via `mergeLint` (promise-function-async conflict)      |
-
----
-
-## 12. Verified outcomes
-
-- `vp install` succeeds; deps are at the latest **non-quarantined** versions
-  (`@figma/plugin-typings` 1.128.0 and `@vitest/coverage-v8` 4.1.8 stepped down from
-  quarantined latests; `vite: "catalog:"` added so `@vitejs/plugin-react` resolves Vite).
-- `vp check` → **0 errors, 0 warnings**, all files formatted.
-- `vp test` → **11/11 passing** (the IPC contract, including the stale-run guard).
-- `vp run build` → emits `dist/{code.js, index.html, manifest.json}`; `code.js` is a
-  proper IIFE, `index.html` is fully self-contained (no external `src`/`href`), the
-  manifest has all required fields with resolving paths. Re-runs hit 100% task cache.
-- The four skills have valid frontmatter and load.
-
-Remaining manual step (by design): import `dist/manifest.json` into Figma desktop to run
-the plugin, and publish from there.
-
----
-
-## 13. Future work (not in this template)
-
-- Extract the IPC bridge (`src/ipc/`) into a standalone, reusable type-safe IPC library.
-- Build the React-Aria-based Figma UI component library (the vendored
-  `src/ui/components/` is the seed).
-- Reconcile the `@saeris/configs` `promise-function-async` / `require-await` conflict
-  upstream so the `mergeLint` override (§6.5) can be removed.
