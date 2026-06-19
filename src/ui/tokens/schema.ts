@@ -17,6 +17,7 @@ export {
   type DtcgColorSpace,
   type DtcgColorValue,
   EXTENSION_KEY,
+  isColorToken,
   type OklchExtension,
   type TokenGroup,
   type TokenTree

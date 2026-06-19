@@ -7,6 +7,7 @@ export {
   type Rgb,
   type Gamut,
   inGamut,
+  maxChroma,
   toRgb,
   rgbToOklch,
   formatOklch,

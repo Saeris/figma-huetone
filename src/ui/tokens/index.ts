@@ -10,6 +10,7 @@ export {
   type TokenTree,
   ColorTokenSchema,
   DtcgColorValueSchema,
+  isColorToken,
   OklchExtensionSchema,
   TokenTreeSchema
 } from "./schema.js";

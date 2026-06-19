@@ -84,6 +84,29 @@ export const rgbToOklch = ({ r, g, b, a }: Rgb, from: Gamut = "srgb"): Oklch =>
   plainToOklch(to({ space: from, coords: [r, g, b], alpha: a }, "oklch"));
 
 /**
+ * The largest chroma that keeps `{ l, h }` inside `gamut`, found by binary search.
+ * This is the upper edge of the valid-chroma range at a given lightness/hue — what
+ * the channel chart shades (Phase 4) and what the seed uses to stay in gamut. The
+ * returned okLCH is exactly in-gamut (within `epsilon` of the boundary).
+ */
+export const maxChroma = (
+  l: number,
+  h: number,
+  gamut: Gamut,
+  epsilon = 0.0001
+): Oklch => {
+  let lo = 0;
+  // 0.5 is comfortably beyond any real sRGB/P3 chroma, so it brackets the boundary.
+  let hi = 0.5;
+  while (hi - lo > epsilon) {
+    const mid = (lo + hi) / 2;
+    if (inGamut({ l, c: mid, h }, gamut)) lo = mid;
+    else hi = mid;
+  }
+  return { l, c: lo, h };
+};
+
+/**
  * Serialize an okLCH color to a canonical CSS `oklch()` string — the exact form we persist in a Figma Variable's code syntax (SPEC §2.7). Round-trips with {@link parseOklch}.
  *
  * We force every coordinate to `<number>` so lightness serializes as e.g. `0.627` rather than colorjs's default `62.7%`. This keeps the persisted string uniform and trivially parseable by the sandbox (which has no colorjs), while remaining valid CSS that {@link parseOklch} round-trips.

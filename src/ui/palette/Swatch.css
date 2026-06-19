@@ -1,0 +1,38 @@
+.swatch {
+  inline-size: 100%;
+  block-size: 28px;
+  padding: 0;
+  border: 1px solid var(--figma-color-border);
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Color comes from an inline `background` (the swatch's oklch()). */
+}
+
+.swatch--selected {
+  outline: 2px solid var(--figma-color-bg-brand);
+  outline-offset: 1px;
+}
+
+.swatch:focus-visible {
+  outline: 2px solid var(--figma-color-border-selected);
+  outline-offset: 1px;
+}
+
+.swatch--empty {
+  block-size: 28px;
+  border: 1px dashed var(--figma-color-border);
+  border-radius: 3px;
+  opacity: 0.4;
+}
+
+/* Out-of-gamut marker: a small warning glyph that reads on any background. */
+.swatch__warning {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 0 2px #000;
+}

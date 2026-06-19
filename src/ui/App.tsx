@@ -1,89 +1,127 @@
 /**
- * Phase 1 harness UI (SPEC §5). This is NOT the real Huetone UI yet — it's a thin surface that exercises the persistence spine end to end so we can SEE it working:
- *
- * - read the document color profile (picks the gamut-mapping target),
- * - read the managed Base Tokens collection into a canonical DTCG tree,
- * - write one token (okLCH → gamut-mapped RGBA + `oklch()` code syntax) and confirm it round-trips back through Figma.
- *
- * The color math lives in `src/ui/color`; the UI derives the render value and the okLCH source string, the sandbox just persists them. The ramp grid, charts, and real controls arrive in later phases.
+ * The plugin UI (Phase 2): the ramp grid + numeric okLCH editor over the managed
+ * Base Tokens collection. On open it reads the document color profile and the token
+ * tree, seeds a default palette if the collection is empty, and renders the grid.
+ * Selecting a swatch opens the editor; edits derive the gamut-mapped RGBA + okLCH
+ * source and persist live via `editToken`, refreshing the grid from the returned
+ * tree. The channel charts and contrast views arrive in later phases.
  */
 
-import { type JSX, useEffect, useState } from "react";
-import type { ColorProfile, TokenEdit } from "../ipc/contract.js";
+import { type JSX, useCallback, useEffect, useMemo, useState } from "react";
+import type { ColorProfile } from "../ipc/contract.js";
 import type { TokenTree } from "../ipc/tokens.js";
 import { createUiBridge } from "../ipc/channel.ui.js";
 import { formatOklch, type Gamut, type Oklch, toRgb } from "./color/index.js";
-import { Button } from "./components/Button.js";
+import {
+  RampGrid,
+  seedPalette,
+  type SwatchVM,
+  SwatchEditor,
+  toPaletteVM
+} from "./palette/index.js";
 import "./App.css";
 
 const bridge = createUiBridge();
+const COLLECTION_NAME = "Huetone Base";
 
 /** The gamut we map okLCH into, per the document profile (SPEC §2.7). */
 const gamutFor = (profile: ColorProfile): Gamut =>
   profile === "DISPLAY_P3" ? "p3" : "srgb";
 
-/**
- * Build the edit payload from a canonical okLCH color: derive the gamut-mapped RGBA render value and serialize the okLCH source string. `modeId` is omitted in Phase 1 so the sandbox targets the collection's default mode.
- */
-const editFor = (path: string[], color: Oklch, gamut: Gamut): TokenEdit => ({
-  path,
-  rgba: toRgb(color, gamut),
-  oklch: formatOklch(color)
-});
+/** Persist one okLCH swatch edit; returns the refreshed tree. */
+const writeToken = async (
+  path: string[],
+  color: Oklch,
+  gamut: Gamut
+): Promise<TokenTree> => {
+  const { tree } = await bridge.call("editToken", {
+    path,
+    rgba: toRgb(color, gamut),
+    oklch: formatOklch(color)
+  });
+  return tree;
+};
+
+/** Write the default seed palette one swatch at a time (used when empty). */
+const writeSeed = async (gamut: Gamut): Promise<TokenTree> => {
+  const seed = seedPalette();
+  let tree: TokenTree = { $type: "color" };
+  for (const [group, ramp] of Object.entries(seed)) {
+    for (const [scale, color] of Object.entries(ramp)) {
+      tree = await writeToken([group, scale], color, gamut);
+    }
+  }
+  return tree;
+};
+
+const isEmpty = (tree: TokenTree): boolean =>
+  Object.keys(tree).filter((k) => !k.startsWith("$")).length === 0;
 
 export const App = (): JSX.Element => {
   const [profile, setProfile] = useState<ColorProfile | null>(null);
   const [tree, setTree] = useState<TokenTree | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
   useEffect(() => {
     void (async (): Promise<void> => {
-      await bridge.call("ensurePaletteCollection", { name: "Huetone Base" });
+      await bridge.call("ensurePaletteCollection", { name: COLLECTION_NAME });
       const { profile: p } = await bridge.call("getColorProfile");
       setProfile(p);
-      const { tree: t } = await bridge.call("readTokens");
-      setTree(t);
+      const { tree: initial } = await bridge.call("readTokens");
+      setTree(isEmpty(initial) ? await writeSeed(gamutFor(p)) : initial);
     })();
   }, []);
 
-  const onWriteSample = async (): Promise<void> => {
-    if (!profile) return;
-    setBusy(true);
-    try {
-      // A representative red 500, authored in okLCH. Round-trips losslessly via code syntax even if gamut-clipped for the render value.
-      const edit = editFor(
-        ["red", "500"],
-        { l: 0.627, c: 0.21, h: 25.4 },
-        gamutFor(profile)
-      );
-      const { tree: t } = await bridge.call("editToken", edit);
-      setTree(t);
-    } finally {
-      setBusy(false);
+  const palette = useMemo(() => (tree ? toPaletteVM(tree) : null), [tree]);
+  const gamut = profile ? gamutFor(profile) : "srgb";
+
+  // Resolve the selected swatch fresh from the current palette so its okLCH stays in
+  // sync with the latest edit.
+  const selected: SwatchVM | null = useMemo(() => {
+    if (!palette || !selectedPath) return null;
+    for (const ramp of palette.ramps) {
+      for (const swatch of ramp.swatches) {
+        if (swatch?.path.join("/") === selectedPath) return swatch;
+      }
     }
-  };
+    return null;
+  }, [palette, selectedPath]);
+
+  const onEdit = useCallback(
+    (path: string[], color: Oklch): void => {
+      void (async (): Promise<void> => {
+        setTree(await writeToken(path, color, gamut));
+      })();
+    },
+    [gamut]
+  );
+
+  if (!palette) {
+    return (
+      <main className="app">
+        <p className="app__hint">Loading palette…</p>
+      </main>
+    );
+  }
 
   return (
     <main className="app">
-      <h2 className="app__title">Huetone — persistence spine</h2>
-      <p className="app__hint">
-        Color profile: <strong>{profile ?? "…"}</strong>
-      </p>
-
-      <footer className="app__actions">
-        <Button
-          variant="brand"
-          onClick={() => void onWriteSample()}
-          disabled={busy || !profile}
-        >
-          {busy ? "Writing…" : "Write sample red/500"}
-        </Button>
-        <Button onClick={() => void bridge.call("close")}>Close</Button>
-      </footer>
-
-      <pre className="app__tree">
-        {tree ? JSON.stringify(tree, null, 2) : "Reading tokens…"}
-      </pre>
+      <RampGrid
+        palette={palette}
+        gamut={gamut}
+        selectedPath={selectedPath}
+        onSelect={(swatch) => setSelectedPath(swatch.path.join("/"))}
+      />
+      {selected ? (
+        <SwatchEditor
+          key={selected.path.join("/")}
+          swatch={selected}
+          gamut={gamut}
+          onEdit={onEdit}
+        />
+      ) : (
+        <p className="app__hint">Select a swatch to edit its okLCH values.</p>
+      )}
     </main>
   );
 };

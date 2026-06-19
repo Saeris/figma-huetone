@@ -18,13 +18,20 @@ export interface FieldProps<T extends FieldValues> extends Omit<
   name: Path<T>;
 }
 
-/** A native `<input>` registered to the ambient form field at `name`. */
+/**
+ * A native `<input>` registered to the ambient form field at `name`. For
+ * `type="number"` it registers with `valueAsNumber` so the field value is a number
+ * (matching a `v.number()` schema), not the raw string the DOM would otherwise give.
+ */
 export const Field = <T extends FieldValues>({
   name,
   ...inputProps
 }: FieldProps<T>): JSX.Element => {
   const { register } = useFormScope<T>();
-  return <input {...register(toName<T>(name))} {...inputProps} />;
+  const valueAsNumber = inputProps.type === "number";
+  return (
+    <input {...register(toName<T>(name), { valueAsNumber })} {...inputProps} />
+  );
 };
 
 export interface FieldErrorProps<T extends FieldValues> {

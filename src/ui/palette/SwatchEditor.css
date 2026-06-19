@@ -1,0 +1,60 @@
+.swatch-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--figma-color-border);
+  border-radius: 4px;
+  background: var(--figma-color-bg-secondary);
+}
+
+.swatch-editor__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.swatch-editor__preview {
+  inline-size: 24px;
+  block-size: 24px;
+  border: 1px solid var(--figma-color-border);
+  border-radius: 3px;
+}
+
+.swatch-editor__title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--figma-color-text);
+}
+
+.swatch-editor__fields {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.swatch-editor__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10px;
+  color: var(--figma-color-text-secondary);
+}
+
+.swatch-editor__field input {
+  inline-size: 100%;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: var(--figma-color-text);
+  background: var(--figma-color-bg);
+  border: 1px solid var(--figma-color-border);
+  border-radius: 3px;
+}
+
+.swatch-editor__warning {
+  margin: 0;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--figma-color-text-warning, var(--figma-color-text-secondary));
+}
