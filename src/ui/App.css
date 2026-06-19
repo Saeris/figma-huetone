@@ -32,21 +32,7 @@ body {
   color: var(--figma-color-text-secondary);
 }
 
-.app__field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--figma-color-text-secondary);
-}
-
-.app__selection {
-  margin: 0;
-  font-size: 11px;
-  color: var(--figma-color-text-secondary);
-}
-
-.app__selection strong {
+.app__hint strong {
   color: var(--figma-color-text);
 }
 
@@ -54,4 +40,19 @@ body {
   display: flex;
   gap: 8px;
   margin-top: 4px;
+}
+
+/* Phase 1: raw DTCG tree dump, so we can see the round-trip working. Temporary —
+   replaced by the ramp grid in a later phase. */
+.app__tree {
+  margin: 0;
+  max-height: 360px;
+  overflow: auto;
+  padding: 8px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--figma-color-text-secondary);
+  background: var(--figma-color-bg-secondary);
+  border-radius: 4px;
 }

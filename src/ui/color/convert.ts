@@ -104,9 +104,17 @@ export const rgbToOklch = ({ r, g, b, a }: Rgb, from: Gamut = "srgb"): Oklch =>
  * Serialize an okLCH color to a canonical CSS `oklch()` string — the exact form
  * we persist in a Figma Variable's code syntax (SPEC §2.7). Round-trips with
  * {@link parseOklch}.
+ *
+ * We force every coordinate to `<number>` so lightness serializes as e.g. `0.627`
+ * rather than colorjs's default `62.7%`. This keeps the persisted string uniform
+ * and trivially parseable by the sandbox (which has no colorjs), while remaining
+ * valid CSS that {@link parseOklch} round-trips.
  */
 export const formatOklch = (color: Oklch): string =>
-  serialize(oklchToColor(color), { format: "oklch" });
+  serialize(oklchToColor(color), {
+    format: "oklch",
+    coords: ["<number>", "<number>", "<number>"]
+  });
 
 /**
  * Parse a CSS color string (canonically an `oklch()` one we wrote, but any CSS

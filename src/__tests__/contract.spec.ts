@@ -18,6 +18,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { mainBridgeOver, uiBridgeOver } from "../ipc/bridge.js";
 import { asyncSignal, eventSignal, subscribe } from "../ipc/signals.js";
+import type { TokenTree } from "../ipc/tokens.js";
 import type { Channel, Envelope } from "../ipc/transport.js";
 
 /**
@@ -56,86 +57,104 @@ const connectedBridges = (): {
   return { ui: uiBridgeOver(uiChan), main: mainBridgeOver(mainChan) };
 };
 
+// A minimal DTCG tree fixture: distinguishable per token so routing is observable.
+const treeWith = (step: string): { tree: TokenTree } => ({
+  tree: {
+    $type: "color",
+    red: {
+      [step]: {
+        $type: "color",
+        $value: { colorSpace: "srgb", components: [1, 0, 0] }
+      }
+    }
+  }
+});
+
 describe("bridge call/handle", () => {
   it("resolves a call with the handler's typed reply", async () => {
     const { ui, main } = connectedBridges();
-    main.handle("createRectangles", ({ count }) => ({ created: count }));
+    main.handle("getColorProfile", () => ({ profile: "DISPLAY_P3" }));
 
-    const result = await ui.call("createRectangles", { count: 5 });
+    const result = await ui.call("getColorProfile");
 
-    // The reply is typed as { created: number } from the contract, no cast.
-    expect(result).toEqual({ created: 5 });
+    // The reply is typed as { profile: ColorProfile } from the contract, no cast.
+    expect(result).toEqual({ profile: "DISPLAY_P3" });
   });
 
   it("routes each call to its own handler", async () => {
     const { ui, main } = connectedBridges();
-    main.handle("createRectangles", ({ count }) => ({ created: count }));
-    main.handle("getSelectionCount", () => ({ count: 2 }));
+    main.handle("getColorProfile", () => ({ profile: "SRGB" }));
+    main.handle("readTokens", () => treeWith("500"));
 
-    await expect(ui.call("getSelectionCount")).resolves.toEqual({ count: 2 });
-    await expect(ui.call("createRectangles", { count: 1 })).resolves.toEqual({
-      created: 1
+    await expect(ui.call("getColorProfile")).resolves.toEqual({
+      profile: "SRGB"
     });
+    await expect(ui.call("readTokens")).resolves.toEqual(treeWith("500"));
   });
 
   it("rejects the caller when the handler throws, preserving the message", async () => {
     const { ui, main } = connectedBridges();
-    main.handle("createRectangles", () => {
-      throw new Error("font not loaded");
+    main.handle("readTokens", () => {
+      throw new Error("no managed collection");
     });
 
-    await expect(ui.call("createRectangles", { count: 1 })).rejects.toThrow(
-      "font not loaded"
+    await expect(ui.call("readTokens")).rejects.toThrow(
+      "no managed collection"
     );
   });
 
   it("rejects a call with no registered handler", async () => {
     const { ui } = connectedBridges();
-    await expect(ui.call("getSelectionCount")).rejects.toThrow(/no handler/i);
+    await expect(ui.call("readTokens")).rejects.toThrow(/no handler/i);
   });
 
   it("stops dispatching after a handler subscription is disposed", async () => {
     const { ui, main } = connectedBridges();
-    const off = main.handle("getSelectionCount", () => ({ count: 9 }));
+    const off = main.handle("readTokens", () => treeWith("900"));
     off();
-    await expect(ui.call("getSelectionCount")).rejects.toThrow(/no handler/i);
+    await expect(ui.call("readTokens")).rejects.toThrow(/no handler/i);
   });
 });
 
 describe("bridge emit/on", () => {
   it("delivers a typed event payload from main to UI", async () => {
     const { ui, main } = connectedBridges();
-    const received: number[] = [];
-    ui.on("selectionChanged", ({ count }) => received.push(count));
+    const received: TokenTree[] = [];
+    ui.on("tokensChanged", ({ tree }) => received.push(tree));
 
-    main.emit("selectionChanged", { count: 3 });
-    await vi.waitFor(() => expect(received).toEqual([3]));
+    main.emit("tokensChanged", treeWith("500"));
+    await vi.waitFor(() => expect(received).toEqual([treeWith("500").tree]));
   });
 
   it("stops delivering after the listener is disposed", async () => {
     const { ui, main } = connectedBridges();
-    const received: number[] = [];
-    const off = ui.on("selectionChanged", ({ count }) => received.push(count));
+    const received: TokenTree[] = [];
+    const off = ui.on("tokensChanged", ({ tree }) => received.push(tree));
 
-    main.emit("selectionChanged", { count: 1 });
-    await vi.waitFor(() => expect(received).toEqual([1]));
+    main.emit("tokensChanged", treeWith("500"));
+    await vi.waitFor(() => expect(received).toHaveLength(1));
 
     off();
-    main.emit("selectionChanged", { count: 2 });
+    main.emit("tokensChanged", treeWith("900"));
     // give any erroneous delivery a chance to land before asserting absence
     await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(received).toEqual([1]);
+    expect(received).toHaveLength(1);
   });
 });
 
 describe("eventSignal", () => {
   it("seeds with the initial value and tracks event payloads", async () => {
     const { ui, main } = connectedBridges();
-    const count = eventSignal(ui, "selectionChanged", (p) => p.count, 0);
-    expect(count.get()).toBe(0);
+    const tree = eventSignal(
+      ui,
+      "tokensChanged",
+      (p) => p.tree,
+      null as TokenTree | null
+    );
+    expect(tree.get()).toBeNull();
 
-    main.emit("selectionChanged", { count: 7 });
-    await vi.waitFor(() => expect(count.get()).toBe(7));
+    main.emit("tokensChanged", treeWith("500"));
+    await vi.waitFor(() => expect(tree.get()).toEqual(treeWith("500").tree));
   });
 });
 
