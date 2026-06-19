@@ -63,6 +63,49 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@jitl/quickjs-ffi-types@npm:0.32.0":
+  version: 0.32.0
+  resolution: "@jitl/quickjs-ffi-types@npm:0.32.0"
+  checksum: 10/e91457b5d55a2ead480c3ad6f47adb460f07aff32c035f73339e37f7be27b99594e645d8325127aa55828773c4ecbc7e3b74bb957b6beedbce0465b59bc13574
+  languageName: node
+  linkType: hard
+
+"@jitl/quickjs-wasmfile-debug-asyncify@npm:0.32.0":
+  version: 0.32.0
+  resolution: "@jitl/quickjs-wasmfile-debug-asyncify@npm:0.32.0"
+  dependencies:
+    "@jitl/quickjs-ffi-types": "npm:0.32.0"
+  checksum: 10/90bf1665c8463fe44b83c25bcfbea849e7188200da618787b04bfee6ca348f41588bd06c842659842c2dafd5fdab0dd81ac9c8c19642e13e083e4cd7383f1a37
+  languageName: node
+  linkType: hard
+
+"@jitl/quickjs-wasmfile-debug-sync@npm:0.32.0":
+  version: 0.32.0
+  resolution: "@jitl/quickjs-wasmfile-debug-sync@npm:0.32.0"
+  dependencies:
+    "@jitl/quickjs-ffi-types": "npm:0.32.0"
+  checksum: 10/736006f918cff763ffbda864205e08e84783f7b7c4bbeb1b3f111d513fb5145890246b7c081080090bb32db13f8d4654afe9875794531893092df878ee81fa5f
+  languageName: node
+  linkType: hard
+
+"@jitl/quickjs-wasmfile-release-asyncify@npm:0.32.0":
+  version: 0.32.0
+  resolution: "@jitl/quickjs-wasmfile-release-asyncify@npm:0.32.0"
+  dependencies:
+    "@jitl/quickjs-ffi-types": "npm:0.32.0"
+  checksum: 10/3109c5f878be00f8db83f7acc838ded7280e967ad85abfa7230665e9d4b027d5aec91356f0b1c3c357828b93901cdbc96aa05bfa0e2a901ddd3d4a5d8c851e9c
+  languageName: node
+  linkType: hard
+
+"@jitl/quickjs-wasmfile-release-sync@npm:0.32.0":
+  version: 0.32.0
+  resolution: "@jitl/quickjs-wasmfile-release-sync@npm:0.32.0"
+  dependencies:
+    "@jitl/quickjs-ffi-types": "npm:0.32.0"
+  checksum: 10/94cbe2b2ab9083ef4b97ae4fa2a540ab9e767e85c8b0550d654f6cccae3034d172273cf6877c398e73a8015bedc95457f5a6b54de34011c0d1f73417bf8bdcdb
+  languageName: node
+  linkType: hard
+
 "@jridgewell/resolve-uri@npm:^3.1.0":
   version: 3.1.2
   resolution: "@jridgewell/resolve-uri@npm:3.1.2"
@@ -863,6 +906,7 @@ __metadata:
     "@vitejs/plugin-react": "npm:^6.0.2"
     "@vitest/coverage-v8": "npm:4.1.8"
     colorjs.io: "npm:^0.6.1"
+    quickjs-emscripten: "npm:^0.32.0"
     react: "npm:^19.2.7"
     react-dom: "npm:^19.2.7"
     signal-polyfill: "npm:0.2.2"
@@ -1429,6 +1473,28 @@ __metadata:
   version: 6.1.0
   resolution: "proc-log@npm:6.1.0"
   checksum: 10/9033f30f168ed5a0991b773d0c50ff88384c4738e9a0a67d341de36bf7293771eed648ab6a0562f62276da12fde91f3bbfc75ffff6e71ad49aafd74fc646be66
+  languageName: node
+  linkType: hard
+
+"quickjs-emscripten-core@npm:0.32.0":
+  version: 0.32.0
+  resolution: "quickjs-emscripten-core@npm:0.32.0"
+  dependencies:
+    "@jitl/quickjs-ffi-types": "npm:0.32.0"
+  checksum: 10/3d01b4c1ba750392cd663891f8de5eaede091dd28b864adbe4ccc345299ecd5bb1a9a9a7ea4392fcb0a8fdc5faec9eb6b5c61340c232e43c7b04a7de18f93ded
+  languageName: node
+  linkType: hard
+
+"quickjs-emscripten@npm:^0.32.0":
+  version: 0.32.0
+  resolution: "quickjs-emscripten@npm:0.32.0"
+  dependencies:
+    "@jitl/quickjs-wasmfile-debug-asyncify": "npm:0.32.0"
+    "@jitl/quickjs-wasmfile-debug-sync": "npm:0.32.0"
+    "@jitl/quickjs-wasmfile-release-asyncify": "npm:0.32.0"
+    "@jitl/quickjs-wasmfile-release-sync": "npm:0.32.0"
+    quickjs-emscripten-core: "npm:0.32.0"
+  checksum: 10/e3e7842fc3ed49a799949cdb0cc627dcc971e0c74112deab5f1cd40403ec0bb60dabac1d0fc7e5a6213cf7f7bb39e4075d23949e04db4c8a1e734f53a6a2275f
   languageName: node
   linkType: hard
 

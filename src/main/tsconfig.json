@@ -7,7 +7,10 @@
     // lib keeps `Symbol.dispose` typed for the disposable; the build downlevels
     // the emitted code.js to the sandbox target.
     "lib": ["ESNext"],
-    "types": ["@figma/plugin-typings"]
+    // `@figma/plugin-typings` for the sandbox `figma` global; `node` for test files
+    // here (e.g. `sandbox-boot.spec.ts`, which builds + loads the bundle in Node).
+    // Sandbox *source* must not use Node APIs — the QuickJS smoke test guards that.
+    "types": ["@figma/plugin-typings", "node"]
   },
   // Main bundles the environment-agnostic IPC core + its own channel, but NOT the
   // UI-only modules (react.ts, channel.ui.ts) — those reference `window`/react and
