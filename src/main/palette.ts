@@ -1,17 +1,9 @@
 /**
- * Sandbox-side mapping between Figma Variables and the canonical DTCG
- * {@link TokenTree} (SPEC §2.7/§2.14). This is the "dumb" half of the persistence
- * spine: it does NO color math (the UI owns that — it sends ready-to-write `rgba`
- * + `oklch` in a {@link TokenEdit}); here we only read/write Figma's Variables API
- * and shuttle plain DTCG JSON across the bridge.
+ * Sandbox-side mapping between Figma Variables and the canonical DTCG {@link TokenTree} (SPEC §2.7/§2.14). This is the "dumb" half of the persistence spine: it does NO color math (the UI owns that — it sends ready-to-write `rgba` + `oklch` in a {@link TokenEdit}); here we only read/write Figma's Variables API and shuttle plain DTCG JSON across the bridge.
  *
  * Runs in `src/main` (needs the `figma` global, async `dynamic-page` API).
  *
- * **Phase 1 scope / known limitation.** Figma **code syntax is per-variable, not
- * per-mode**, but okLCH differs per mode (light/dark). So the lossless okLCH source
- * round-trips for ONE mode (the collection's default) today. Reading any other mode
- * derives okLCH from that mode's RGBA (lossy) until we move multi-mode okLCH storage
- * into plugin data — revisited when modes land (Phase 2).
+ * **Phase 1 scope / known limitation.** Figma **code syntax is per-variable, not per-mode**, but okLCH differs per mode (light/dark). So the lossless okLCH source round-trips for ONE mode (the collection's default) today. Reading any other mode derives okLCH from that mode's RGBA (lossy) until we move multi-mode okLCH storage into plugin data — revisited when modes land (Phase 2).
  */
 
 import {
@@ -29,8 +21,7 @@ const MANAGED_MARKER_KEY = "huetone.managed";
 const NAME_SEP = "/";
 
 /**
- * Find our managed Base Tokens collection by its private plugin-data marker —
- * robust to the user renaming it — creating it (marked, with `name`) if absent.
+ * Find our managed Base Tokens collection by its private plugin-data marker — robust to the user renaming it — creating it (marked, with `name`) if absent.
  */
 export const ensurePaletteCollection = async (
   name: string
@@ -64,12 +55,9 @@ const rgbaToHex = ({ r, g, b, a }: RGBA): string => {
 };
 
 /**
- * Parse the `L C H` triple out of an `oklch(L C H[ / a])` string (the form the UI
- * sends and we persist in code syntax). Returns `null` for anything unparseable —
- * the caller then falls back to deriving okLCH from the RGBA value.
+ * Parse the `L C H` triple out of an `oklch(L C H[ / a])` string (the form the UI sends and we persist in code syntax). Returns `null` for anything unparseable — the caller then falls back to deriving okLCH from the RGBA value.
  *
- * Deliberately a narrow numeric parse, not a full CSS color parser: the sandbox has
- * no colorjs, and we only ever read back strings we wrote.
+ * Deliberately a narrow numeric parse, not a full CSS color parser: the sandbox has no colorjs, and we only ever read back strings we wrote.
  */
 const parseOklchTriple = (
   css: string | undefined
@@ -112,7 +100,9 @@ const colorTokenFor = (
   return token;
 };
 
-/** Insert `token` into `tree` at the nested `path`, creating groups as needed. */
+/**
+ * Insert `token` into `tree` at the nested `path`, creating groups as needed.
+ */
 const setAtPath = (
   tree: TokenGroup,
   path: string[],
@@ -133,9 +123,7 @@ const setAtPath = (
 };
 
 /**
- * Project a managed collection's color variables into a canonical DTCG tree for
- * `modeId` (defaults to the collection's default mode). Variable names like
- * `red/500` become nested groups (`{ red: { "500": <token> } }`).
+ * Project a managed collection's color variables into a canonical DTCG tree for `modeId` (defaults to the collection's default mode). Variable names like `red/500` become nested groups (`{ red: { "500": <token> } }`).
  */
 export const readTokens = async (
   collection: VariableCollection,
@@ -163,9 +151,7 @@ const findVariableByName = async (
 };
 
 /**
- * Apply one {@link TokenEdit}: write the mode RGBA value and the okLCH code syntax,
- * creating the variable if its path is new. The UI already gamut-mapped the RGBA
- * and serialized the okLCH source, so this is a pure write.
+ * Apply one {@link TokenEdit}: write the mode RGBA value and the okLCH code syntax, creating the variable if its path is new. The UI already gamut-mapped the RGBA and serialized the okLCH source, so this is a pure write.
  */
 export const applyEdit = async (
   collection: VariableCollection,

@@ -1,29 +1,22 @@
 /**
- * Main thread (sandbox) entry — runs in Figma's QuickJS sandbox with the `figma`
- * global but no DOM. It opens the UI, then registers typed handlers for the
- * persistence procedures the UI `call`s and pushes `tokensChanged` events.
+ * Main thread (sandbox) entry — runs in Figma's QuickJS sandbox with the `figma` global but no DOM. It opens the UI, then registers typed handlers for the persistence procedures the UI `call`s and pushes `tokensChanged` events.
  *
- * This is the sandbox half of Phase 1's persistence spine (SPEC §5). All color math
- * lives in the UI; here we only read/write Figma Variables via `src/main/palette.ts`
- * and shuttle plain DTCG JSON across the bridge.
+ * This is the sandbox half of Phase 1's persistence spine (SPEC §5). All color math lives in the UI; here we only read/write Figma Variables via `src/main/palette.ts` and shuttle plain DTCG JSON across the bridge.
  */
 
 import { createMainBridge } from "../ipc/channel.main.js";
 import { installDisposeShim } from "../ipc/disposable.js";
 import { applyEdit, ensurePaletteCollection, readTokens } from "./palette.js";
 
-// Seed `Symbol.dispose` before any `using` runs (the sandbox is ES2020 and may
-// lack it). No-op where it already exists.
+// Seed `Symbol.dispose` before any `using` runs (the sandbox is ES2020 and may lack it). No-op where it already exists.
 installDisposeShim();
 
-// Open the UI. `themeColors: true` injects Figma's `--figma-color-*` variables so
-// the UI matches the user's light/dark theme. `__html__` is the bundled ui.html.
+// Open the UI. `themeColors: true` injects Figma's `--figma-color-*` variables so the UI matches the user's light/dark theme. `__html__` is the bundled ui.html.
 figma.showUI(__html__, { themeColors: true, width: 480, height: 600 });
 
 const bridge = createMainBridge(figma.ui);
 
-// The managed collection, resolved lazily on first use and cached. Tokens always
-// read/write through this so reads and edits agree on the same collection.
+// The managed collection, resolved lazily on first use and cached. Tokens always read/write through this so reads and edits agree on the same collection.
 let collectionId: string | undefined;
 
 const resolveCollection = async (

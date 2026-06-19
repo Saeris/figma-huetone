@@ -1,15 +1,10 @@
 /**
- * Tests for the color engine. These assert the GUARANTEES the rest of the plugin
- * relies on — not just that colorjs.io works:
+ * Tests for the color engine. These assert the GUARANTEES the rest of the plugin relies on — not just that colorjs.io works:
  *
- * - okLCH ⇄ `oklch()` string round-trips **losslessly** (the whole reason we
- *   persist okLCH in code syntax instead of hex — SPEC §2.7);
- * - the okLCH → RGBA derivation is **perceptually gamut-mapped**, so an
- *   out-of-sRGB color is brought *into* gamut rather than left invalid or naïvely
- *   clipped, while the okLCH source is left untouched;
+ * - okLCH ⇄ `oklch()` string round-trips **losslessly** (the whole reason we persist okLCH in code syntax instead of hex — SPEC §2.7);
+ * - the okLCH → RGBA derivation is **perceptually gamut-mapped**, so an out-of-sRGB color is brought *into* gamut rather than left invalid or naïvely clipped, while the okLCH source is left untouched;
  * - `inGamut` flags the out-of-gamut case the UI warns on;
- * - APCA is signed/polarity-sensitive and WCAG is a symmetric ratio — the two
- *   measures we must never conflate.
+ * - APCA is signed/polarity-sensitive and WCAG is a symmetric ratio — the two measures we must never conflate.
  */
 
 import { describe, expect, it } from "vitest";
@@ -29,8 +24,7 @@ const close = (a: number, b: number, eps = 1e-12): boolean =>
 
 describe("okLCH code-syntax round-trip", () => {
   it("recovers an okLCH color exactly through format → parse", () => {
-    // This is the precision property Huetone loses by serializing to hex. A
-    // representative in-gamut color with non-trivial digits in every channel.
+    // This is the precision property Huetone loses by serializing to hex. A representative in-gamut color with non-trivial digits in every channel.
     const original: Oklch = { l: 0.627, c: 0.21, h: 25.4, alpha: 1 };
     const recovered = parseOklch(formatOklch(original));
 
@@ -53,9 +47,7 @@ describe("okLCH code-syntax round-trip", () => {
 
 describe("gamut testing", () => {
   it("flags a vivid okLCH color as outside sRGB but inside P3", () => {
-    // High chroma green: representable in Display P3 but not sRGB. This is exactly
-    // the case the UI surfaces a warning for and that gamut target selection cares
-    // about (SPEC §2.7).
+    // High chroma green: representable in Display P3 but not sRGB. This is exactly the case the UI surfaces a warning for and that gamut target selection cares about (SPEC §2.7).
     const vivid: Oklch = { l: 0.86, c: 0.29, h: 142 };
     expect(inGamut(vivid, "srgb")).toBe(false);
     expect(inGamut(vivid, "p3")).toBe(true);
@@ -76,7 +68,7 @@ describe("okLCH → RGBA derivation (perceptual gamut map)", () => {
       expect(channel).toBeGreaterThanOrEqual(0);
       expect(channel).toBeLessThanOrEqual(1);
     }
-    // Derivation is reversible for an in-gamut color (within sRGB 8-ish-bit noise).
+    // Derivation is reversible for an in-gamut color (within sRGB 8-ish-bit noise)
     const back = rgbToOklch(rgb, "srgb");
     expect(close(back.l, c.l, 1e-3)).toBe(true);
   });
@@ -90,8 +82,7 @@ describe("okLCH → RGBA derivation (perceptual gamut map)", () => {
       expect(channel).toBeGreaterThanOrEqual(0);
       expect(channel).toBeLessThanOrEqual(1);
     }
-    // The mapped result, read back as okLCH, is now within sRGB: chroma was pulled
-    // in. (Perceptual map preserves L far better than it preserves C.)
+    // The mapped result, read back as okLCH, is now within sRGB: chroma was pulled in. (Perceptual map preserves L far better than it preserves C.)
     const mapped = rgbToOklch(rgb, "srgb");
     expect(mapped.c).toBeLessThan(vivid.c);
     expect(inGamut(mapped, "srgb")).toBe(true);
@@ -100,7 +91,7 @@ describe("okLCH → RGBA derivation (perceptual gamut map)", () => {
   it("does not mutate the source okLCH when mapping", () => {
     const vivid: Oklch = { l: 0.86, c: 0.29, h: 142 };
     toRgb(vivid, "srgb");
-    // Source is preserved — intent stays in okLCH even when the render value clips.
+    // Source is preserved — intent stays in okLCH even when the render value clips
     expect(vivid).toEqual({ l: 0.86, c: 0.29, h: 142 });
   });
 });

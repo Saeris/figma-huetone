@@ -1,16 +1,9 @@
 /**
- * Tests the sandbox-side Figma ↔ DTCG mapping (`palette.ts`) against an in-memory
- * fake of the Figma Variables API. This is Phase 1's load-bearing test: it proves
- * the persistence spine end to end, especially the property the whole plugin exists
- * for —
+ * Tests the sandbox-side Figma ↔ DTCG mapping (`palette.ts`) against an in-memory fake of the Figma Variables API. This is Phase 1's load-bearing test: it proves the persistence spine end to end, especially the property the whole plugin exists for —
  *
- *   **okLCH survives the round-trip through Figma losslessly**, because we persist
- *   the canonical `oklch()` string in code syntax and read it back, rather than
- *   re-deriving it from the lossy RGBA value (SPEC §2.7).
+ *   **okLCH survives the round-trip through Figma losslessly**, because we persist the canonical `oklch()` string in code syntax and read it back, rather than re-deriving it from the lossy RGBA value (SPEC §2.7).
  *
- * The fake models only what `palette.ts` touches: collections with a plugin-data
- * marker + default mode, and color variables with `valuesByMode`, `codeSyntax`,
- * `setValueForMode`, `setVariableCodeSyntax`. No real Figma, no DOM — pure Node.
+ * The fake models only what `palette.ts` touches: collections with a plugin-data marker + default mode, and color variables with `valuesByMode`, `codeSyntax`, `setValueForMode`, `setVariableCodeSyntax`. No real Figma, no DOM — pure Node.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -23,7 +16,7 @@ import {
 import { isColorToken, type TokenGroup } from "../ipc/tokens.js";
 import { applyEdit, ensurePaletteCollection, readTokens } from "./palette.js";
 
-// --- minimal in-memory Figma fake -------------------------------------------
+// --- minimal in-memory Figma fake ---
 
 interface FakeVariable {
   id: string;
@@ -149,12 +142,14 @@ describe("ensurePaletteCollection", () => {
     expect(first.getPluginData("huetone.managed")).toBe("1");
 
     // A second call finds it by marker, not name — no duplicate.
+
     const second = await ensurePaletteCollection("Renamed By User");
     expect(second.id).toBe(first.id);
   });
 
   it("ignores unmarked collections (e.g. the user's own)", async () => {
     // Simulate a pre-existing foreign collection with no marker.
+
     fake.variables.createVariableCollection("User Colors");
     const managed = await ensurePaletteCollection("Huetone Base");
     expect(managed.name).toBe("Huetone Base");
@@ -177,6 +172,7 @@ describe("okLCH lossless round-trip through Figma", () => {
     });
 
     // Sandbox read → DTCG tree; UI parses the okLCH back out of $extensions.
+
     const tree = await readTokens(collection);
     const red = tree.red as TokenGroup;
     const token = red["500"];
@@ -193,6 +189,7 @@ describe("okLCH lossless round-trip through Figma", () => {
   it("preserves okLCH intent even when the RGBA render value is gamut-clipped", async () => {
     const collection = await ensurePaletteCollection("Huetone Base");
     // Out-of-sRGB vivid green: $value gets clipped, $extensions keeps the intent.
+
     const vivid: Oklch = { l: 0.86, c: 0.29, h: 142 };
 
     await applyEdit(collection, {

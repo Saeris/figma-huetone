@@ -1,7 +1,5 @@
 /**
- * The canonical DTCG token model (SPEC §2.14): schema (Valibot source of truth +
- * inferred types) and the okLCH ⇄ color-token bridge that carries the lossless
- * source in `$extensions`.
+ * The canonical DTCG token model (SPEC §2.14): schema (Valibot source of truth + inferred types) and the okLCH ⇄ color-token bridge that carries the lossless source in `$extensions`.
  */
 
 export {

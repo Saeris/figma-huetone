@@ -1,15 +1,11 @@
 /**
  * @vitest-environment jsdom
  *
- * Integration tests for the form composition layer (SPEC §2.11). The UI runs in an
- * iframe ≈ Chromium, so these run in jsdom (testing-ladder tier 2). They prove the
- * pieces work TOGETHER as the real plugin will use them:
+ * Integration tests for the form composition layer (SPEC §2.11). The UI runs in an iframe ≈ Chromium, so these run in jsdom (testing-ladder tier 2). They prove the pieces work TOGETHER as the real plugin will use them:
  *
  * - fields attach to the ambient form by a typed `names` node, no prop-drilling;
- * - a Valibot schema (the value-shape source of truth) validates on submit and
- *   surfaces messages through `FieldError`;
- * - `Control` binds a CUSTOM (non-native) control to form state — the pattern our
- *   okLCH sliders will use — and edits flow back into the form value.
+ * - a Valibot schema (the value-shape source of truth) validates on submit and surfaces messages through `FieldError`;
+ * - `Control` binds a CUSTOM (non-native) control to form state — the pattern our okLCH sliders will use — and edits flow back into the form value.
  */
 
 import "@testing-library/jest-dom/vitest";
@@ -21,8 +17,7 @@ import * as v from "valibot";
 import type { JSX } from "react";
 import { Control, Field, FieldError, Form, useTypedForm } from "./index.js";
 
-// The Valibot schema IS the form's value shape — and thus the source of truth the
-// `names` proxy is typed against.
+// The Valibot schema IS the form's value shape — and thus the source of truth the `names` proxy is typed against.
 const Schema = v.object({
   label: v.pipe(v.string(), v.minLength(1, "Label is required")),
   swatch: v.object({
@@ -49,8 +44,7 @@ const Harness = ({
       </label>
       <FieldError<Values> name={form.names.label} />
 
-      {/* Custom control bound via Control — the okLCH-slider pattern. A plain
-          number input stands in for the slider here. */}
+      {/* Custom control bound via Control — the okLCH-slider pattern. A plain number input stands in for the slider here. */}
       <Control<Values> name={form.names.swatch.l}>
         {({ field }) => (
           <label>

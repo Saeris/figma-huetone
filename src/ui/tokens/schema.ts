@@ -1,12 +1,7 @@
 /**
- * Valibot runtime validation for the canonical DTCG model (SPEC §2.14). The token
- * **types** live in `src/ipc/tokens.ts` (shared, pure-type leaf both threads
- * import); this module adds the runtime schemas that validate untrusted input —
- * e.g. a `TokenTree` read back from a document or another tool — and re-exports the
- * types for convenience.
+ * Valibot runtime validation for the canonical DTCG model (SPEC §2.14). The token **types** live in `src/ipc/tokens.ts` (shared, pure-type leaf both threads import); this module adds the runtime schemas that validate untrusted input — e.g. a `TokenTree` read back from a document or another tool — and re-exports the types for convenience.
  *
- * We model only the slice of DTCG the plugin needs today (`color` tokens, groups,
- * aliases), spec-compatibly, so we can grow into more of DTCG later.
+ * We model only the slice of DTCG the plugin needs today (`color` tokens, groups, aliases), spec-compatibly, so we can grow into more of DTCG later.
  */
 
 import * as v from "valibot";
@@ -59,23 +54,11 @@ export const ColorTokenSchema = v.object({
 });
 
 /**
- * Runtime schema for a node that is either a color token or a group of them.
- * Tokens are distinguished from groups by the presence of `$value` (per DTCG);
- * groups are recursive, so we validate them lazily.
+ * Runtime schema for a node that is either a color token or a group of them. Tokens are distinguished from groups by the presence of `$value` (per DTCG); groups are recursive, so we validate them lazily.
  *
- * The recursive group branch (`objectWithRest`) has an inferred output type that
- * doesn't structurally match our hand-written {@link TokenGroup} interface (its
- * index signature is wider), so we annotate the schema with our intended type via a
- * single `GenericSchema` parameter — the one reviewed seam between Valibot's
- * inference and our DTCG types, mirroring how the IPC bridge re-applies contract
- * types over the untyped transport.
+ * The recursive group branch (`objectWithRest`) has an inferred output type that doesn't structurally match our hand-written {@link TokenGroup} interface (its index signature is wider), so we annotate the schema with our intended type via a single `GenericSchema` parameter — the one reviewed seam between Valibot's inference and our DTCG types, mirroring how the IPC bridge re-applies contract types over the untyped transport.
  */
-// The explicit annotation breaks the recursive inference cycle (the schema
-// references itself via `v.lazy`). Valibot's recursive `objectWithRest` output
-// doesn't structurally match our hand-written DTCG types, so the lazy schema is
-// asserted to our intended type — the one reviewed seam between Valibot's inference
-// and our DTCG types (mirrors the IPC bridge re-applying contract types over the
-// untyped transport).
+// The explicit annotation breaks the recursive inference cycle (the schema references itself via `v.lazy`). Valibot's recursive `objectWithRest` output doesn't structurally match our hand-written DTCG types, so the lazy schema is asserted to our intended type — the one reviewed seam between Valibot's inference and our DTCG types (mirrors the IPC bridge re-applying contract types over the untyped transport).
 export const TokenNodeSchema: v.GenericSchema<
   unknown,
   ColorToken | TokenGroup

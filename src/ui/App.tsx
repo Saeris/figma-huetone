@@ -1,15 +1,11 @@
 /**
- * Phase 1 harness UI (SPEC §5). This is NOT the real Huetone UI yet — it's a thin
- * surface that exercises the persistence spine end to end so we can SEE it working:
+ * Phase 1 harness UI (SPEC §5). This is NOT the real Huetone UI yet — it's a thin surface that exercises the persistence spine end to end so we can SEE it working:
  *
  * - read the document color profile (picks the gamut-mapping target),
  * - read the managed Base Tokens collection into a canonical DTCG tree,
- * - write one token (okLCH → gamut-mapped RGBA + `oklch()` code syntax) and confirm
- *   it round-trips back through Figma.
+ * - write one token (okLCH → gamut-mapped RGBA + `oklch()` code syntax) and confirm it round-trips back through Figma.
  *
- * The color math lives in `src/ui/color`; the UI derives the render value and the
- * okLCH source string, the sandbox just persists them. The ramp grid, charts, and
- * real controls arrive in later phases.
+ * The color math lives in `src/ui/color`; the UI derives the render value and the okLCH source string, the sandbox just persists them. The ramp grid, charts, and real controls arrive in later phases.
  */
 
 import { type JSX, useEffect, useState } from "react";
@@ -27,9 +23,7 @@ const gamutFor = (profile: ColorProfile): Gamut =>
   profile === "DISPLAY_P3" ? "p3" : "srgb";
 
 /**
- * Build the edit payload from a canonical okLCH color: derive the gamut-mapped RGBA
- * render value and serialize the okLCH source string. `modeId` is omitted in Phase 1
- * so the sandbox targets the collection's default mode.
+ * Build the edit payload from a canonical okLCH color: derive the gamut-mapped RGBA render value and serialize the okLCH source string. `modeId` is omitted in Phase 1 so the sandbox targets the collection's default mode.
  */
 const editFor = (path: string[], color: Oklch, gamut: Gamut): TokenEdit => ({
   path,
@@ -56,8 +50,7 @@ export const App = (): JSX.Element => {
     if (!profile) return;
     setBusy(true);
     try {
-      // A representative red 500, authored in okLCH. Round-trips losslessly via
-      // code syntax even if gamut-clipped for the render value.
+      // A representative red 500, authored in okLCH. Round-trips losslessly via code syntax even if gamut-clipped for the render value.
       const edit = editFor(
         ["red", "500"],
         { l: 0.627, c: 0.21, h: 25.4 },

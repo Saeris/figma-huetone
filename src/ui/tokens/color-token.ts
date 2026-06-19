@@ -1,13 +1,7 @@
 /**
- * Bridge between the color engine ({@link Oklch}) and DTCG color tokens
- * ({@link ColorToken}). This is where SPEC §2.7's persistence model becomes
- * concrete: a token's `$value` is the **derived, gamut-mapped** RGB the renderer
- * uses, while the **canonical okLCH source** rides along in `$extensions`.
+ * Bridge between the color engine ({@link Oklch}) and DTCG color tokens ({@link ColorToken}). This is where SPEC §2.7's persistence model becomes concrete: a token's `$value` is the **derived, gamut-mapped** RGB the renderer uses, while the **canonical okLCH source** rides along in `$extensions`.
  *
- * `colorTokenFromOklch` is the write path (okLCH → token); `oklchFromColorToken`
- * is the read path, and it embodies the round-trip guarantee: prefer the lossless
- * `$extensions` okLCH, fall back to re-deriving from `$value` only when the source
- * is missing (e.g. a token authored by another tool).
+ * `colorTokenFromOklch` is the write path (okLCH → token); `oklchFromColorToken` is the read path, and it embodies the round-trip guarantee: prefer the lossless `$extensions` okLCH, fall back to re-deriving from `$value` only when the source is missing (e.g. a token authored by another tool).
  */
 
 import {
@@ -44,10 +38,7 @@ const toHex = ({ r, g, b, a }: Rgb): string => {
 };
 
 /**
- * Build a DTCG color token from a canonical okLCH color, gamut-mapping `$value`
- * into `gamut` (which should follow the document's color profile — SPEC §2.7).
- * The okLCH source is stored verbatim in `$extensions`, so the token round-trips
- * losslessly regardless of how `$value` was clipped.
+ * Build a DTCG color token from a canonical okLCH color, gamut-mapping `$value` into `gamut` (which should follow the document's color profile — SPEC §2.7). The okLCH source is stored verbatim in `$extensions`, so the token round-trips losslessly regardless of how `$value` was clipped.
  */
 export const colorTokenFromOklch = (color: Oklch, gamut: Gamut): ColorToken => {
   const rgb = toRgb(color, gamut);
@@ -66,10 +57,7 @@ export const colorTokenFromOklch = (color: Oklch, gamut: Gamut): ColorToken => {
 };
 
 /**
- * Read the canonical okLCH out of a color token. Uses the lossless `$extensions`
- * source when present; otherwise re-derives okLCH from `$value` (lossy, but the
- * best available for foreign tokens). Alpha is taken from `$value` either way,
- * since `$extensions` stores only the L/C/H triple.
+ * Read the canonical okLCH out of a color token. Uses the lossless `$extensions` source when present; otherwise re-derives okLCH from `$value` (lossy, but the best available for foreign tokens). Alpha is taken from `$value` either way, since `$extensions` stores only the L/C/H triple.
  */
 export const oklchFromColorToken = (token: ColorToken): Oklch => {
   const alpha = token.$value.alpha ?? 1;

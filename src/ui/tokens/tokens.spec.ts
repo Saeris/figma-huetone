@@ -1,16 +1,10 @@
 /**
- * Tests for the canonical DTCG model. These encode WHY the model is shaped as it
- * is (SPEC §2.14):
+ * Tests for the canonical DTCG model. These encode WHY the model is shaped as it is (SPEC §2.14):
  *
- * - a color token carries the lossless okLCH source in `$extensions`, so
- *   okLCH → token → okLCH round-trips EXACTLY — the precision guarantee the whole
- *   plugin depends on, now at the token layer;
- * - `$value` is the DTCG color the renderer/other tools read, gamut-mapped to the
- *   active profile and tagged with the matching `colorSpace`;
- * - a foreign token with no `$extensions` source still yields okLCH (re-derived
- *   from `$value`), so we interoperate with tokens authored elsewhere;
- * - the schema validates real tokens and rejects malformed ones, and distinguishes
- *   tokens (have `$value`) from groups (don't) per DTCG.
+ * - a color token carries the lossless okLCH source in `$extensions`, so okLCH → token → okLCH round-trips EXACTLY — the precision guarantee the whole plugin depends on, now at the token layer;
+ * - `$value` is the DTCG color the renderer/other tools read, gamut-mapped to the active profile and tagged with the matching `colorSpace`;
+ * - a foreign token with no `$extensions` source still yields okLCH (re-derived from `$value`), so we interoperate with tokens authored elsewhere;
+ * - the schema validates real tokens and rejects malformed ones, and distinguishes tokens (have `$value`) from groups (don't) per DTCG.
  */
 
 import { describe, expect, it } from "vitest";
