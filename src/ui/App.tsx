@@ -21,6 +21,7 @@ import {
   type GridColor,
   SelectionContrastReadout
 } from "./contrast/index.js";
+import { ExportPanel } from "./export/index.js";
 import {
   allSwatches,
   AxisEditor,
@@ -255,6 +256,11 @@ export const App = (): JSX.Element => {
           foregrounds={gridColors.foregrounds}
           backgrounds={gridColors.backgrounds}
         />
+      </details>
+
+      <details className="app__axes">
+        <summary>Export</summary>
+        {tree ? <ExportPanel tree={tree} /> : null}
       </details>
     </main>
   );
