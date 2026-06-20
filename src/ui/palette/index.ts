@@ -20,6 +20,7 @@ export {
   withChannel
 } from "./channel.js";
 export { SEED_SCALES, seedPalette } from "./seed.js";
+export { AxisEditor, type AxisEditorProps } from "./AxisEditor.js";
 export { RampGrid, type RampGridProps } from "./RampGrid.js";
 export { Swatch, type SwatchProps } from "./Swatch.js";
 export {

@@ -6,7 +6,15 @@
 
 import { createMainBridge } from "../ipc/channel.main.js";
 import { installDisposeShim } from "../ipc/disposable.js";
-import { applyEdit, ensurePaletteCollection, readTokens } from "./palette.js";
+import {
+  applyEdit,
+  ensurePaletteCollection,
+  readTokens,
+  removeGroup,
+  removeScale,
+  renameGroup,
+  renameScale
+} from "./palette.js";
 import { selectionContrast } from "./selection.js";
 
 // Seed `Symbol.dispose` before any `using` runs (the sandbox is ES2020 and may lack it). No-op where it already exists.
@@ -51,6 +59,30 @@ bridge.handle("readTokens", async () => {
 bridge.handle("editToken", async (edit) => {
   const collection = await resolveCollection();
   await applyEdit(collection, edit);
+  return { tree: await readTokens(collection) };
+});
+
+bridge.handle("renameGroup", async ({ from, to }) => {
+  const collection = await resolveCollection();
+  await renameGroup(collection, from, to);
+  return { tree: await readTokens(collection) };
+});
+
+bridge.handle("renameScale", async ({ from, to }) => {
+  const collection = await resolveCollection();
+  await renameScale(collection, from, to);
+  return { tree: await readTokens(collection) };
+});
+
+bridge.handle("removeGroup", async ({ name }) => {
+  const collection = await resolveCollection();
+  await removeGroup(collection, name);
+  return { tree: await readTokens(collection) };
+});
+
+bridge.handle("removeScale", async ({ scale }) => {
+  const collection = await resolveCollection();
+  await removeScale(collection, scale);
   return { tree: await readTokens(collection) };
 });
 

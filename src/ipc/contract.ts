@@ -68,6 +68,26 @@ export interface Procedures {
    * Apply one token edit (write the mode RGBA + okLCH code syntax). Creates the variable if the path is new. Returns the re-read tree so the UI stays in sync.
    */
   editToken: (input: TokenEdit) => { tree: TokenTree };
+  /**
+   * Rename a color group (`from` → `to`): renames every variable `from/*` to `to/*`.
+   * A no-op if `from` doesn't exist. Returns the refreshed tree.
+   */
+  renameGroup: (input: { from: string; to: string }) => { tree: TokenTree };
+  /**
+   * Rename a scale step across all groups (`from` → `to`): renames every variable
+   * whose last path segment is `from`. Returns the refreshed tree.
+   */
+  renameScale: (input: { from: string; to: string }) => { tree: TokenTree };
+  /**
+   * Remove a color group: deletes every variable under the `name` group. Returns the
+   * refreshed tree.
+   */
+  removeGroup: (input: { name: string }) => { tree: TokenTree };
+  /**
+   * Remove a scale step across all groups: deletes every variable whose last path
+   * segment is `scale`. Returns the refreshed tree.
+   */
+  removeScale: (input: { scale: string }) => { tree: TokenTree };
   /** Read the foreground/background contrast pair from the current selection, or null. */
   getSelectionContrast: () => { contrast: SelectionContrast | null };
   /** Close the plugin (optionally surfacing a toast first). */

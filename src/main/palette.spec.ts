@@ -14,7 +14,15 @@ import {
   toRgb
 } from "../ui/color/index.js";
 import { isColorToken, type TokenGroup } from "../ipc/tokens.js";
-import { applyEdit, ensurePaletteCollection, readTokens } from "./palette.js";
+import {
+  applyEdit,
+  ensurePaletteCollection,
+  readTokens,
+  removeGroup,
+  removeScale,
+  renameGroup,
+  renameScale
+} from "./palette.js";
 
 // --- minimal in-memory Figma fake ---
 
@@ -26,6 +34,7 @@ interface FakeVariable {
   codeSyntax: { WEB?: string };
   setValueForMode: (modeId: string, value: RGBA) => void;
   setVariableCodeSyntax: (platform: "WEB", value: string) => void;
+  remove: () => void;
 }
 
 interface FakeCollection {
@@ -112,6 +121,12 @@ const installFigmaFake = (): { profile: "SRGB" | "DISPLAY_P3" } => {
           },
           setVariableCodeSyntax: (_platform, value) => {
             variable.codeSyntax.WEB = value;
+          },
+          remove: () => {
+            variables.delete(id);
+            collection.variableIds = collection.variableIds.filter(
+              (vid) => vid !== id
+            );
           }
         };
         variables.set(id, variable);
@@ -244,5 +259,71 @@ describe("okLCH lossless round-trip through Figma", () => {
     expect(token.$extensions?.["io.saeris.huetone"]?.oklch).toEqual([
       0.6, 0.2, 26
     ]);
+  });
+});
+
+describe("axis operations", () => {
+  beforeEach(installFigmaFake);
+  afterEach(uninstallFigmaFake);
+
+  const seed = async (): Promise<VariableCollection> => {
+    const collection = await ensurePaletteCollection("Huetone Base");
+    const write = async (path: string[]): Promise<void> =>
+      applyEdit(collection, {
+        path,
+        rgba: { r: 0.5, g: 0.5, b: 0.5, a: 1 },
+        oklch: "oklch(0.6 0.1 200)"
+      });
+    await write(["red", "100"]);
+    await write(["red", "500"]);
+    await write(["blue", "100"]);
+    await write(["blue", "500"]);
+    return collection;
+  };
+
+  const groups = (tree: TokenGroup): string[] =>
+    Object.keys(tree).filter((k) => !k.startsWith("$"));
+
+  it("renames a group across all its scales", async () => {
+    const collection = await seed();
+    await renameGroup(collection, "red", "crimson");
+    const tree = await readTokens(collection);
+    expect(groups(tree).sort()).toEqual(["blue", "crimson"]);
+    // The scales moved with the group.
+    expect(Object.keys(tree.crimson as TokenGroup).sort()).toEqual([
+      "100",
+      "500"
+    ]);
+  });
+
+  it("renames a scale step across all groups", async () => {
+    const collection = await seed();
+    await renameScale(collection, "500", "550");
+    const tree = await readTokens(collection);
+    expect(Object.keys(tree.red as TokenGroup).sort()).toEqual(["100", "550"]);
+    expect(Object.keys(tree.blue as TokenGroup).sort()).toEqual(["100", "550"]);
+  });
+
+  it("removes a group and all its variables", async () => {
+    const collection = await seed();
+    await removeGroup(collection, "red");
+    const tree = await readTokens(collection);
+    expect(groups(tree)).toEqual(["blue"]);
+    expect(collection.variableIds).toHaveLength(2); // only blue/100, blue/500
+  });
+
+  it("removes a scale step across all groups", async () => {
+    const collection = await seed();
+    await removeScale(collection, "100");
+    const tree = await readTokens(collection);
+    expect(Object.keys(tree.red as TokenGroup)).toEqual(["500"]);
+    expect(Object.keys(tree.blue as TokenGroup)).toEqual(["500"]);
+  });
+
+  it("is a no-op when renaming a group that doesn't exist", async () => {
+    const collection = await seed();
+    await renameGroup(collection, "green", "lime");
+    const tree = await readTokens(collection);
+    expect(groups(tree).sort()).toEqual(["blue", "red"]);
   });
 });

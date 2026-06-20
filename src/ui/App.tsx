@@ -17,6 +17,7 @@ import { eventSignal } from "../ipc/signals.js";
 import { formatOklch, type Gamut, type Oklch, toRgb } from "./color/index.js";
 import { ContrastDisplay, SelectionContrastReadout } from "./contrast/index.js";
 import {
+  AxisEditor,
   RampGrid,
   rampSiblings,
   seedPalette,
@@ -112,6 +113,48 @@ export const App = (): JSX.Element => {
     [gamut]
   );
 
+  // --- Axis operations (Phase 3) ---
+  // Rename/remove go straight to the sandbox; add seeds a neutral mid-tone swatch
+  // at each cell of the new row/column via the normal edit path.
+  const axisCall = useCallback(
+    (pending: Promise<{ tree: TokenTree }>): void => {
+      void (async (): Promise<void> => {
+        setTree((await pending).tree);
+      })();
+    },
+    []
+  );
+
+  const seedSwatch = (): Oklch => ({ l: 0.6, c: 0.02, h: 0 });
+
+  const addGroup = useCallback(
+    (name: string): void => {
+      if (!palette) return;
+      void (async (): Promise<void> => {
+        let next: TokenTree | null = null;
+        for (const scale of palette.scales) {
+          next = await writeToken([name, scale], seedSwatch(), gamut);
+        }
+        if (next) setTree(next);
+      })();
+    },
+    [palette, gamut]
+  );
+
+  const addScale = useCallback(
+    (scale: string): void => {
+      if (!palette) return;
+      void (async (): Promise<void> => {
+        let next: TokenTree | null = null;
+        for (const ramp of palette.ramps) {
+          next = await writeToken([ramp.group, scale], seedSwatch(), gamut);
+        }
+        if (next) setTree(next);
+      })();
+    },
+    [palette, gamut]
+  );
+
   if (!palette) {
     return (
       <main className="app">
@@ -128,6 +171,29 @@ export const App = (): JSX.Element => {
         selectedPath={selectedPath}
         onSelect={(swatch) => setSelectedPath(swatch.path.join("/"))}
       />
+
+      <details className="app__axes">
+        <summary>Edit axes</summary>
+        <AxisEditor
+          groups={palette.ramps.map((r) => r.group)}
+          scales={palette.scales}
+          onRenameGroup={(from, to) =>
+            axisCall(bridge.call("renameGroup", { from, to }))
+          }
+          onRemoveGroup={(name) =>
+            axisCall(bridge.call("removeGroup", { name }))
+          }
+          onAddGroup={addGroup}
+          onRenameScale={(from, to) =>
+            axisCall(bridge.call("renameScale", { from, to }))
+          }
+          onRemoveScale={(scale) =>
+            axisCall(bridge.call("removeScale", { scale }))
+          }
+          onAddScale={addScale}
+        />
+      </details>
+
       {selected ? (
         <>
           <SwatchEditor

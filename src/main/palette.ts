@@ -165,3 +165,71 @@ export const applyEdit = async (
   variable.setValueForMode(modeId, edit.rgba);
   variable.setVariableCodeSyntax("WEB", edit.oklch);
 };
+
+// --- Axis operations (Phase 3, SPEC §2.12) ----------------------------------
+
+/** Every color variable in the collection, paired with its `/`-split name path. */
+const colorVariablesWithPath = async (
+  collection: VariableCollection
+): Promise<Array<{ variable: Variable; path: string[] }>> => {
+  const result: Array<{ variable: Variable; path: string[] }> = [];
+  for (const id of collection.variableIds) {
+    const variable = await figma.variables.getVariableByIdAsync(id);
+    if (variable?.resolvedType === "COLOR") {
+      result.push({ variable, path: variable.name.split(NAME_SEP) });
+    }
+  }
+  return result;
+};
+
+/**
+ * Rename a color group: every variable whose first path segment is `from` is renamed
+ * with that segment changed to `to`. A no-op when nothing matches.
+ */
+export const renameGroup = async (
+  collection: VariableCollection,
+  from: string,
+  to: string
+): Promise<void> => {
+  for (const { variable, path } of await colorVariablesWithPath(collection)) {
+    if (path[0] === from) {
+      variable.name = [to, ...path.slice(1)].join(NAME_SEP);
+    }
+  }
+};
+
+/**
+ * Rename a scale step across all groups: every variable whose LAST path segment is
+ * `from` is renamed with that segment changed to `to`.
+ */
+export const renameScale = async (
+  collection: VariableCollection,
+  from: string,
+  to: string
+): Promise<void> => {
+  for (const { variable, path } of await colorVariablesWithPath(collection)) {
+    if (path[path.length - 1] === from) {
+      variable.name = [...path.slice(0, -1), to].join(NAME_SEP);
+    }
+  }
+};
+
+/** Remove a color group: delete every variable whose first path segment is `name`. */
+export const removeGroup = async (
+  collection: VariableCollection,
+  name: string
+): Promise<void> => {
+  for (const { variable, path } of await colorVariablesWithPath(collection)) {
+    if (path[0] === name) variable.remove();
+  }
+};
+
+/** Remove a scale step: delete every variable whose last path segment is `scale`. */
+export const removeScale = async (
+  collection: VariableCollection,
+  scale: string
+): Promise<void> => {
+  for (const { variable, path } of await colorVariablesWithPath(collection)) {
+    if (path[path.length - 1] === scale) variable.remove();
+  }
+};

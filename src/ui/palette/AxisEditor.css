@@ -1,0 +1,64 @@
+.axis-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.axis-editor__axis {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.axis-editor__axis-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--figma-color-text-secondary);
+}
+
+.axis-editor__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.axis-editor__chip,
+.axis-editor__add {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.axis-editor__chip-input {
+  inline-size: 64px;
+  box-sizing: border-box;
+  padding: 3px 6px;
+  font-size: 11px;
+  color: var(--figma-color-text);
+  background: var(--figma-color-bg);
+  border: 1px solid var(--figma-color-border);
+  border-radius: 3px;
+}
+
+.axis-editor__chip-remove {
+  inline-size: 18px;
+  block-size: 18px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--figma-color-text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.axis-editor__chip-remove:hover {
+  color: var(--figma-color-text-danger, #c00);
+  background: var(--figma-color-bg-hover, var(--figma-color-bg-secondary));
+}
