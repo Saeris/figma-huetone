@@ -32,6 +32,24 @@ export interface TokenEdit {
   oklch: string;
 }
 
+/** A solid color extracted from a Figma node fill; channels + alpha in [0, 1]. */
+export interface SelectionColor {
+  /** A human label for the node the color came from (its name). */
+  label: string;
+  rgba: { r: number; g: number; b: number; a: number };
+}
+
+/**
+ * The foreground/background pair derived from the current canvas selection
+ * (Polychrom-style, SPEC §2.3). The sandbox extracts the solid fills (it has no
+ * color math); the UI converts to okLCH and computes APCA/WCAG. `null` when the
+ * selection doesn't yield a usable pair (no solid fill, too many nodes, etc.).
+ */
+export interface SelectionContrast {
+  foreground: SelectionColor;
+  background: SelectionColor;
+}
+
 /**
  * Request→reply procedures the UI can `call` and the main thread handles. Each entry is `(input) => output`; either may be `void`. Inputs and outputs must be structured-clonable (no functions, DOM nodes, or class instances) — everything crossing `postMessage` is cloned. A `TokenTree` is plain JSON, so it crosses as-is.
  */
@@ -50,6 +68,8 @@ export interface Procedures {
    * Apply one token edit (write the mode RGBA + okLCH code syntax). Creates the variable if the path is new. Returns the re-read tree so the UI stays in sync.
    */
   editToken: (input: TokenEdit) => { tree: TokenTree };
+  /** Read the foreground/background contrast pair from the current selection, or null. */
+  getSelectionContrast: () => { contrast: SelectionContrast | null };
   /** Close the plugin (optionally surfacing a toast first). */
   close: (input?: { notify?: string }) => void;
 }
@@ -60,6 +80,8 @@ export interface Procedures {
 export interface Events {
   /** Fired when the managed collection changes, carrying the fresh DTCG tree. */
   tokensChanged: { tree: TokenTree };
+  /** Fired when the canvas selection changes, with the derived contrast pair (or null). */
+  selectionContrastChanged: { contrast: SelectionContrast | null };
 }
 
 // --- derived helper types (you should not need to touch these) ---

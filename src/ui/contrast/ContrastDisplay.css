@@ -1,0 +1,48 @@
+.contrast-display {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.contrast-display__metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--figma-color-border);
+  border-radius: 4px;
+  background: var(--figma-color-bg-secondary);
+}
+
+.contrast-display__label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--figma-color-text-secondary);
+}
+
+.contrast-display__value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--figma-color-text);
+}
+
+.contrast-display__tier {
+  font-size: 11px;
+  color: var(--figma-color-text-secondary);
+}
+
+.contrast-display__verdict {
+  margin-block-start: 2px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.contrast-display__verdict--pass {
+  color: var(--figma-color-text-success, #0a0);
+}
+
+.contrast-display__verdict--fail {
+  color: var(--figma-color-text-danger, #c00);
+}

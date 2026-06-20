@@ -1,17 +1,21 @@
 /**
- * The plugin UI (Phase 2): the ramp grid + numeric okLCH editor over the managed
- * Base Tokens collection. On open it reads the document color profile and the token
- * tree, seeds a default palette if the collection is empty, and renders the grid.
- * Selecting a swatch opens the editor; edits derive the gamut-mapped RGBA + okLCH
- * source and persist live via `editToken`, refreshing the grid from the returned
- * tree. The channel charts and contrast views arrive in later phases.
+ * The plugin UI (Phases 2–5): the ramp grid + numeric/slider okLCH editor over the
+ * managed Base Tokens collection, plus the contrast views. On open it reads the
+ * document color profile and the token tree, seeds a default palette if the
+ * collection is empty, and renders the grid. Selecting a swatch opens the editor;
+ * edits derive the gamut-mapped RGBA + okLCH source and persist live via `editToken`.
+ * The editor shows the swatch's contrast on white and black; a live readout shows the
+ * contrast of the current canvas selection (Polychrom-style). The contrast grid and
+ * export arrive in later phases.
  */
 
 import { type JSX, useCallback, useEffect, useMemo, useState } from "react";
-import type { ColorProfile } from "../ipc/contract.js";
+import type { ColorProfile, SelectionContrast } from "../ipc/contract.js";
 import type { TokenTree } from "../ipc/tokens.js";
 import { createUiBridge } from "../ipc/channel.ui.js";
+import { eventSignal } from "../ipc/signals.js";
 import { formatOklch, type Gamut, type Oklch, toRgb } from "./color/index.js";
+import { ContrastDisplay, SelectionContrastReadout } from "./contrast/index.js";
 import {
   RampGrid,
   rampSiblings,
@@ -24,6 +28,17 @@ import "./App.css";
 
 const bridge = createUiBridge();
 const COLLECTION_NAME = "Huetone Base";
+
+/** Live selection-contrast pair pushed from the sandbox (Polychrom-style). */
+const selectionContrast = eventSignal(
+  bridge,
+  "selectionContrastChanged",
+  (payload): SelectionContrast | null => payload.contrast,
+  null
+);
+
+const WHITE: Oklch = { l: 1, c: 0, h: 0 };
+const BLACK: Oklch = { l: 0, c: 0, h: 0 };
 
 /** The gamut we map okLCH into, per the document profile (SPEC §2.7). */
 const gamutFor = (profile: ColorProfile): Gamut =>
@@ -114,16 +129,28 @@ export const App = (): JSX.Element => {
         onSelect={(swatch) => setSelectedPath(swatch.path.join("/"))}
       />
       {selected ? (
-        <SwatchEditor
-          key={selected.path.join("/")}
-          swatch={selected}
-          gamut={gamut}
-          siblings={rampSiblings(palette, selected)}
-          onEdit={onEdit}
-        />
+        <>
+          <SwatchEditor
+            key={selected.path.join("/")}
+            swatch={selected}
+            gamut={gamut}
+            siblings={rampSiblings(palette, selected)}
+            onEdit={onEdit}
+          />
+          <section className="app__section">
+            <h3 className="app__section-title">Contrast on white / black</h3>
+            <ContrastDisplay text={selected.oklch} background={WHITE} />
+            <ContrastDisplay text={selected.oklch} background={BLACK} />
+          </section>
+        </>
       ) : (
         <p className="app__hint">Select a swatch to edit its okLCH values.</p>
       )}
+
+      <section className="app__section">
+        <h3 className="app__section-title">Selection contrast</h3>
+        <SelectionContrastReadout signal={selectionContrast} />
+      </section>
     </main>
   );
 };

@@ -28,6 +28,8 @@ const driver = (requestName: string): string => `
   globalThis.figma = {
     showUI: () => {},
     closePlugin: () => {},
+    on: () => {},
+    currentPage: { selection: [], backgrounds: [] },
     root: { documentColorProfile: "DISPLAY_P3" },
     ui: {
       postMessage: (msg) => { __posted.push(msg); },

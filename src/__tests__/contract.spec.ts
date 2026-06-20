@@ -18,6 +18,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { mainBridgeOver, uiBridgeOver } from "../ipc/bridge.js";
 import { asyncSignal, eventSignal, subscribe } from "../ipc/signals.js";
+import type { SelectionContrast } from "../ipc/contract.js";
 import type { TokenTree } from "../ipc/tokens.js";
 import type { Channel, Envelope } from "../ipc/transport.js";
 
@@ -139,6 +140,23 @@ describe("bridge emit/on", () => {
     // give any erroneous delivery a chance to land before asserting absence
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(received).toHaveLength(1);
+  });
+
+  it("delivers the selection-contrast pair (and null) over the bridge", async () => {
+    const { ui, main } = connectedBridges();
+    const received: (SelectionContrast | null)[] = [];
+    ui.on("selectionContrastChanged", ({ contrast }) =>
+      received.push(contrast)
+    );
+
+    const pair: SelectionContrast = {
+      foreground: { label: "Text", rgba: { r: 0, g: 0, b: 0, a: 1 } },
+      background: { label: "Card", rgba: { r: 1, g: 1, b: 1, a: 1 } }
+    };
+    main.emit("selectionContrastChanged", { contrast: pair });
+    main.emit("selectionContrastChanged", { contrast: null });
+
+    await vi.waitFor(() => expect(received).toEqual([pair, null]));
   });
 });
 

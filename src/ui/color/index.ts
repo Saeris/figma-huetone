@@ -14,3 +14,12 @@ export {
   parseOklch
 } from "./convert.js";
 export { apca, wcag21 } from "./contrast.js";
+export {
+  type ContrastTier,
+  contrastTier,
+  FONT_WEIGHTS,
+  type FontWeight,
+  minFontSize,
+  NEVER,
+  passesAPCA
+} from "./fontLookup.js";

@@ -7,6 +7,7 @@
 import { createMainBridge } from "../ipc/channel.main.js";
 import { installDisposeShim } from "../ipc/disposable.js";
 import { applyEdit, ensurePaletteCollection, readTokens } from "./palette.js";
+import { selectionContrast } from "./selection.js";
 
 // Seed `Symbol.dispose` before any `using` runs (the sandbox is ES2020 and may lack it). No-op where it already exists.
 installDisposeShim();
@@ -53,6 +54,18 @@ bridge.handle("editToken", async (edit) => {
   return { tree: await readTokens(collection) };
 });
 
+bridge.handle("getSelectionContrast", () => ({
+  contrast: selectionContrast()
+}));
+
 bridge.handle("close", (input) => {
   figma.closePlugin(input?.notify);
+});
+
+// --- Events: push live document state to the UI ---
+
+// Re-derive the selection contrast pair whenever the canvas selection changes, so
+// the UI's selection readout stays live (SPEC §2.3).
+figma.on("selectionchange", () => {
+  bridge.emit("selectionContrastChanged", { contrast: selectionContrast() });
 });
