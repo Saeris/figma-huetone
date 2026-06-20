@@ -14,6 +14,7 @@ import { createUiBridge } from "../ipc/channel.ui.js";
 import { formatOklch, type Gamut, type Oklch, toRgb } from "./color/index.js";
 import {
   RampGrid,
+  rampSiblings,
   seedPalette,
   type SwatchVM,
   SwatchEditor,
@@ -117,6 +118,7 @@ export const App = (): JSX.Element => {
           key={selected.path.join("/")}
           swatch={selected}
           gamut={gamut}
+          siblings={rampSiblings(palette, selected)}
           onEdit={onEdit}
         />
       ) : (

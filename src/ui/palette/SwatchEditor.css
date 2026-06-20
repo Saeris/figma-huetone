@@ -27,21 +27,27 @@
   color: var(--figma-color-text);
 }
 
-.swatch-editor__fields {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-
-.swatch-editor__field {
+.swatch-editor__sliders {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  font-size: 10px;
+  gap: 10px;
+}
+
+.swatch-editor__alpha {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--figma-color-text-secondary);
 }
 
-.swatch-editor__field input {
+.swatch-editor__alpha span {
+  text-align: center;
+}
+
+.swatch-editor__alpha input {
   inline-size: 100%;
   box-sizing: border-box;
   padding: 4px 6px;

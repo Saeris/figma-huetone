@@ -1,0 +1,57 @@
+.channel-slider {
+  display: grid;
+  grid-template-columns: 16px 1fr 56px;
+  align-items: center;
+  gap: 8px;
+}
+
+.channel-slider__label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--figma-color-text-secondary);
+  text-align: center;
+}
+
+.channel-slider__track {
+  position: relative;
+  block-size: 16px;
+  border-radius: 8px;
+  border: 1px solid var(--figma-color-border);
+  /* A subtle checkerboard shows through where a histogram overlay marks invalid
+     (out-of-gamut) regions as gaps. */
+  background: var(--figma-color-bg-secondary);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.channel-slider__thumb {
+  position: absolute;
+  inset-block-start: 50%;
+  inline-size: 12px;
+  block-size: 12px;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: var(--figma-color-bg);
+  border: 2px solid var(--figma-color-text);
+  cursor: grab;
+}
+
+.channel-slider__thumb:active {
+  cursor: grabbing;
+}
+
+.channel-slider__thumb:focus-visible {
+  outline: 2px solid var(--figma-color-border-selected);
+  outline-offset: 2px;
+}
+
+.channel-slider__input {
+  inline-size: 100%;
+  box-sizing: border-box;
+  padding: 3px 4px;
+  font-size: 11px;
+  color: var(--figma-color-text);
+  background: var(--figma-color-bg);
+  border: 1px solid var(--figma-color-border);
+  border-radius: 3px;
+}

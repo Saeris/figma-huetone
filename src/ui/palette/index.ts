@@ -7,10 +7,28 @@
 export {
   type PaletteVM,
   type RampVM,
+  rampSiblings,
   type SwatchVM,
   toPaletteVM
 } from "./model.js";
+export {
+  type Channel,
+  CHANNEL_DOMAIN,
+  chromaCeiling,
+  clampChannel,
+  sampleChannel,
+  withChannel
+} from "./channel.js";
 export { SEED_SCALES, seedPalette } from "./seed.js";
 export { RampGrid, type RampGridProps } from "./RampGrid.js";
 export { Swatch, type SwatchProps } from "./Swatch.js";
-export { SwatchEditor, type SwatchEditorProps } from "./SwatchEditor.js";
+export {
+  ChannelHistogram,
+  type ChannelHistogramProps
+} from "./ChannelHistogram.js";
+export { ChannelSlider, type ChannelSliderProps } from "./ChannelSlider.js";
+export {
+  type ChannelSiblings,
+  SwatchEditor,
+  type SwatchEditorProps
+} from "./SwatchEditor.js";

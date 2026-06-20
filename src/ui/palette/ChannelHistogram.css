@@ -1,0 +1,25 @@
+.channel-histogram {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* The in-gamut color band. Out-of-gamut samples are `transparent`, so the track's
+   own background shows through as a gap. */
+.channel-histogram__band {
+  position: absolute;
+  inset: 0;
+}
+
+/* A sibling-ramp marker: a thin vertical tick showing where another swatch in this
+   ramp sits on this channel, so the ramp's spacing is visible. */
+.channel-histogram__tick {
+  position: absolute;
+  inset-block: 2px;
+  inline-size: 1px;
+  translate: -50% 0;
+  background: var(--figma-color-text);
+  opacity: 0.5;
+}

@@ -92,14 +92,22 @@ describe("swatch editor", () => {
     scale: "500",
     oklch: { l: 0.6, c: 0.15, h: 25, alpha: 1 } as Oklch
   };
+  const siblings = { l: [], c: [], h: [] };
 
   it("persists a derived okLCH edit when a channel changes", async () => {
     const onEdit = vi.fn<(path: string[], color: Oklch) => void>();
     const user = userEvent.setup();
-    render(<SwatchEditor swatch={swatch} gamut="srgb" onEdit={onEdit} />);
+    render(
+      <SwatchEditor
+        swatch={swatch}
+        gamut="srgb"
+        siblings={siblings}
+        onEdit={onEdit}
+      />
+    );
 
-    // Bump lightness to 0.7.
-    const l = screen.getByLabelText("L");
+    // Bump lightness to 0.7 via the L slider's paired number input.
+    const l = screen.getByLabelText("L value");
     await user.clear(l);
     await user.type(l, "0.7");
 
@@ -115,10 +123,17 @@ describe("swatch editor", () => {
   it("shows the out-of-gamut notice when the edited color leaves the gamut", async () => {
     const onEdit = vi.fn<(path: string[], color: Oklch) => void>();
     const user = userEvent.setup();
-    render(<SwatchEditor swatch={swatch} gamut="srgb" onEdit={onEdit} />);
+    render(
+      <SwatchEditor
+        swatch={swatch}
+        gamut="srgb"
+        siblings={siblings}
+        onEdit={onEdit}
+      />
+    );
 
     // Push chroma well past the sRGB boundary for this hue/lightness.
-    const c = screen.getByLabelText("C");
+    const c = screen.getByLabelText("C value");
     await user.clear(c);
     await user.type(c, "0.4");
 

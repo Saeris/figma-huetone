@@ -103,3 +103,23 @@ export const toPaletteVM = (tree: TokenGroup): PaletteVM => {
 
   return { scales, ramps };
 };
+
+/**
+ * The per-channel sibling values for `selected` — the okLCH channel values of every
+ * OTHER swatch in the same ramp (group). Feeds the histogram's relationship ticks so
+ * a swatch's spacing against the rest of its ramp is visible (SPEC §2.10).
+ */
+export const rampSiblings = (
+  palette: PaletteVM,
+  selected: SwatchVM
+): { l: number[]; c: number[]; h: number[] } => {
+  const ramp = palette.ramps.find((r) => r.group === selected.group);
+  const others = (ramp?.swatches ?? []).filter(
+    (s): s is SwatchVM => s !== null && s.scale !== selected.scale
+  );
+  return {
+    l: others.map((s) => s.oklch.l),
+    c: others.map((s) => s.oklch.c),
+    h: others.map((s) => s.oklch.h)
+  };
+};
