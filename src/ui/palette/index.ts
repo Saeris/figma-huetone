@@ -5,6 +5,7 @@
  */
 
 export {
+  allSwatches,
   type PaletteVM,
   type RampVM,
   rampSiblings,

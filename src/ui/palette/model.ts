@@ -104,6 +104,12 @@ export const toPaletteVM = (tree: TokenGroup): PaletteVM => {
   return { scales, ramps };
 };
 
+/** Every swatch in the palette, flattened in row-major order (group then scale). */
+export const allSwatches = (palette: PaletteVM): SwatchVM[] =>
+  palette.ramps.flatMap((ramp) =>
+    ramp.swatches.filter((s): s is SwatchVM => s !== null)
+  );
+
 /**
  * The per-channel sibling values for `selected` — the okLCH channel values of every
  * OTHER swatch in the same ramp (group). Feeds the histogram's relationship ticks so

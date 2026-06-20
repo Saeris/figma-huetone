@@ -15,8 +15,14 @@ import type { TokenTree } from "../ipc/tokens.js";
 import { createUiBridge } from "../ipc/channel.ui.js";
 import { eventSignal } from "../ipc/signals.js";
 import { formatOklch, type Gamut, type Oklch, toRgb } from "./color/index.js";
-import { ContrastDisplay, SelectionContrastReadout } from "./contrast/index.js";
 import {
+  ContrastDisplay,
+  ContrastGrid,
+  type GridColor,
+  SelectionContrastReadout
+} from "./contrast/index.js";
+import {
+  allSwatches,
   AxisEditor,
   RampGrid,
   rampSiblings,
@@ -103,6 +109,31 @@ export const App = (): JSX.Element => {
     }
     return null;
   }, [palette, selectedPath]);
+
+  // Contrast-grid scope (Phase 6): every swatch as foreground text, against a small
+  // representative background set — white, black, and the lightest swatch of each
+  // group (typical surface colors) — so the matrix stays useful rather than N×N.
+  const gridColors = useMemo((): {
+    foregrounds: GridColor[];
+    backgrounds: GridColor[];
+  } => {
+    if (!palette) return { foregrounds: [], backgrounds: [] };
+    const swatches = allSwatches(palette);
+    const foregrounds = swatches.map((s) => ({
+      id: s.path.join("/"),
+      oklch: s.oklch
+    }));
+    const lightestPerGroup = palette.ramps
+      .map((ramp) => ramp.swatches.find((s) => s !== null))
+      .filter((s): s is SwatchVM => s != null)
+      .map((s) => ({ id: s.path.join("/"), oklch: s.oklch }));
+    const backgrounds: GridColor[] = [
+      { id: "white", oklch: WHITE },
+      { id: "black", oklch: BLACK },
+      ...lightestPerGroup
+    ];
+    return { foregrounds, backgrounds };
+  }, [palette]);
 
   const onEdit = useCallback(
     (path: string[], color: Oklch): void => {
@@ -217,6 +248,14 @@ export const App = (): JSX.Element => {
         <h3 className="app__section-title">Selection contrast</h3>
         <SelectionContrastReadout signal={selectionContrast} />
       </section>
+
+      <details className="app__axes">
+        <summary>Contrast grid</summary>
+        <ContrastGrid
+          foregrounds={gridColors.foregrounds}
+          backgrounds={gridColors.backgrounds}
+        />
+      </details>
     </main>
   );
 };

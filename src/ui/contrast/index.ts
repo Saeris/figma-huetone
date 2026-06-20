@@ -1,13 +1,21 @@
 /**
- * Contrast UI (Phase 5, SPEC §2.5/§2.3): the APCA + WCAG display for a color pair
- * and the live selection-contrast readout (Polychrom-style). The contrast grid
- * (SPEC §2.6) lands here in Phase 6.
+ * Contrast UI (SPEC §2.3/§2.5/§2.6): the APCA + WCAG display for a color pair, the
+ * live selection-contrast readout (Polychrom-style), and the contrast grid (the
+ * contrast.tools-style pairing matrix).
  */
 
 export {
   ContrastDisplay,
   type ContrastDisplayProps
 } from "./ContrastDisplay.js";
+export {
+  type CellVerdict,
+  contrastGrid,
+  type ContrastGridModel,
+  type FontContext,
+  type GridColor
+} from "./grid.js";
+export { ContrastGrid, type ContrastGridProps } from "./ContrastGrid.js";
 export {
   SelectionContrastReadout,
   type SelectionContrastReadoutProps
