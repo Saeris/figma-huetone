@@ -1,0 +1,905 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>
+      Lighting-model palettes — brand + neutral + surface, in pure CSS
+    </title>
+    <!--
+  Proof-of-concept for research/CSS_LIGHTING_PALETTES.md.
+
+  A small but complete "lit UI environment" generated from a few diffuse colors,
+  with modern CSS color features. The user controls BRAND / NEUTRAL / SURFACE
+  diffuse colors + the LIGHT (key/sky/bounce/angle = "time of day") + a light/dark
+  toggle. Generated:
+    • brand + neutral ramps, ordered light→dark, lit by one shared light, that
+      reflect a little of the surface (so they belong on it); hue shifts as they darken
+    • per-role APCA-Lc targets clamp the contrast-critical steps (text Lc60/90,
+      borders Lc15/30/45) — lighting sets feel, contrast sets lightness
+    • natural lit borders (Schoger), layered hue-matched direction-aware shadows
+    • a sample UI built only from these tokens; swatch labels + button text pick
+      black/white automatically with contrast-color()
+
+  Almost all color math is CSS (relative colors + color-mix + typed attr() +
+  @function + light-dark() + contrast-color()). JS only: mirror inputs→data-attrs,
+  and a small "Lc pass" computing each role's target lightness (APCA can't run in CSS).
+-->
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      /* Pure-CSS dark toggle: a checkbox flips color-scheme via :has(). */
+      body:has(#mode:checked) {
+        color-scheme: dark;
+      }
+
+      /* ---- typed knobs (animatable) ------------------------------------------- */
+      @property --brand-l {
+        syntax: "<number>";
+        inherits: true;
+        initial-value: 0.62;
+      }
+      @property --brand-c {
+        syntax: "<number>";
+        inherits: true;
+        initial-value: 0.15;
+      }
+      @property --brand-h {
+        syntax: "<number>";
+        inherits: true;
+        initial-value: 264;
+      }
+      @property --neut-l {
+        syntax: "<number>";
+        inherits: true;
+        initial-value: 0.6;
+      }
+      @property --neut-c {
+        syntax: "<number>";
+        inherits: true;
+        initial-value: 0.02;
+      }
+      @property --neut-h {
+        syntax: "<number>";
+        inherits: true;
+        initial-value: 264;
+      }
+      @property --surf-h {
+        syntax: "<number>";
+        inherits: true;
+        initial-value: 264;
+      }
+      @property --surf-c {
+        syntax: "<number>";
+        inherits: true;
+        initial-value: 0.01;
+      }
+      @property --key-h {
+        syntax: "<number>";
+        inherits: true;
+        initial-value: 85;
+      }
+      @property --key-s {
+        syntax: "<number>";
+        inherits: true;
+        initial-value: 0.1;
+      }
+      @property --sky-h {
+        syntax: "<number>";
+        inherits: true;
+        initial-value: 240;
+      }
+      @property --sky-s {
+        syntax: "<number>";
+        inherits: true;
+        initial-value: 0.1;
+      }
+      @property --bounce-h {
+        syntax: "<number>";
+        inherits: true;
+        initial-value: 60;
+      }
+      @property --bounce-s {
+        syntax: "<number>";
+        inherits: true;
+        initial-value: 0.06;
+      }
+      @property --surf-reflect {
+        syntax: "<number>";
+        inherits: true;
+        initial-value: 0.1;
+      }
+      @property --key-angle {
+        syntax: "<number>";
+        inherits: true;
+        initial-value: 315;
+      }
+
+      #env {
+        --brand-l: attr(data-brand-l type(<number>), 0.62);
+        --brand-c: attr(data-brand-c type(<number>), 0.15);
+        --brand-h: attr(data-brand-h type(<number>), 264);
+        --neut-l: attr(data-neut-l type(<number>), 0.6);
+        --neut-c: attr(data-neut-c type(<number>), 0.02);
+        --neut-h: attr(data-neut-h type(<number>), 264);
+        --surf-h: attr(data-surf-h type(<number>), 264);
+        --surf-c: attr(data-surf-c type(<number>), 0.01);
+        --key-h: attr(data-key-h type(<number>), 85);
+        --key-s: attr(data-key-s type(<number>), 0.1);
+        --sky-h: attr(data-sky-h type(<number>), 240);
+        --sky-s: attr(data-sky-s type(<number>), 0.1);
+        --bounce-h: attr(data-bounce-h type(<number>), 60);
+        --bounce-s: attr(data-bounce-s type(<number>), 0.06);
+        --surf-reflect: attr(data-surf-reflect type(<number>), 0.1);
+        --key-angle: attr(data-key-angle type(<number>), 315);
+
+        /* SURFACE lightness is a plain number set by the dark-mode toggle (JS). It must
+     NOT use light-dark(): relative color syntax can't destructure a light-dark()
+     origin, so `oklch(from var(--surface) …)` would return transparent. */
+        --surf-l: attr(data-surf-l type(<number>), 0.97);
+
+        --brand: oklch(var(--brand-l) var(--brand-c) var(--brand-h));
+        --neutral: oklch(var(--neut-l) var(--neut-c) var(--neut-h));
+        --surface: oklch(var(--surf-l) var(--surf-c) var(--surf-h));
+
+        transition:
+          --key-h 0.7s ease,
+          --sky-h 0.7s ease,
+          --key-s 0.7s,
+          --sky-s 0.7s,
+          --key-angle 0.7s,
+          --surf-l 0.35s,
+          --bounce-s 0.7s;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+
+      /* ---- the lighting function (CSS @function; progressive enhancement) ------ */
+      @function --lit(--albedo, --L, --t) {
+        --sh: calc(1 - var(--t));
+        --base: oklch(from var(--albedo) var(--L) c h);
+        /* light "colors" share the base lightness → tinting rotates hue, never washes */
+        --keyc: oklch(from var(--base) l calc(c * 0.6 + 0.05) var(--key-h));
+        --skyc: oklch(from var(--base) l calc(c * 0.6 + 0.04) var(--sky-h));
+        --bnc: oklch(from var(--base) l calc(c * 0.6 + 0.04) var(--bounce-h));
+        --k: color-mix(
+          in oklch,
+          var(--base),
+          var(--keyc) calc(var(--key-s) * var(--t) * 100%)
+        );
+        --s: color-mix(
+          in oklch,
+          var(--k),
+          var(--skyc) calc(var(--sky-s) * var(--sh) * 100%)
+        );
+        --b: color-mix(
+          in oklch,
+          var(--s),
+          var(--bnc) calc(var(--bounce-s) * var(--sh) * var(--sh) * 100%)
+        );
+        --refl: oklch(from var(--surface) var(--L) c h);
+        result: color-mix(
+          in oklch,
+          var(--b),
+          var(--refl) calc(var(--surf-reflect) * 100%)
+        );
+      }
+
+      /* ---- ramp swatch: label color auto-picks black/white with contrast-color() */
+      .sw {
+        --albedo: var(--ramp-albedo);
+        --L: attr(data-l type(<number>), 0.6);
+        --t: attr(data-lit type(<number>), 0.5);
+        --c: --lit(var(--albedo), var(--L), var(--t));
+        background: var(--c);
+        color: contrast-color(var(--c));
+      }
+      .ramp.brand {
+        --ramp-albedo: var(--brand);
+      }
+      .ramp.neutral {
+        --ramp-albedo: var(--neutral);
+      }
+
+      /* ---- natural lit border (Schoger): lit top edge, shadowed bottom --------- */
+      .lit-border {
+        --bl: var(--border-l, 0.6);
+        --top: --lit(var(--neutral), calc(var(--bl) + 0.14), 1);
+        --bottom: --lit(var(--neutral), calc(var(--bl) - 0.04), 0);
+        border: 1px solid transparent;
+        border-image: linear-gradient(180deg, var(--top), var(--bottom)) 1;
+      }
+
+      /* ---- elevation + shadow from the same light ----------------------------- */
+      .elevated {
+        --shadow: color-mix(
+          in oklch,
+          oklch(from var(--surface) calc(l * 0.3 + 0.05) calc(c * 1.4) h),
+          oklch(0.3 0.1 var(--sky-h)) 40%
+        );
+        --dx: calc(
+          -1 * sin(var(--key-angle) * 1deg)
+        ); /* CSS y-down; 315°=upper-left light */
+        --dy: calc(cos(var(--key-angle) * 1deg));
+        --e: var(--elev, 1);
+        box-shadow:
+          calc(var(--dx) * 1px * var(--e)) calc(var(--dy) * 1px * var(--e))
+            calc(2px * var(--e))
+            color-mix(in oklch, var(--shadow), transparent 78%),
+          calc(var(--dx) * 3px * var(--e)) calc(var(--dy) * 3px * var(--e))
+            calc(6px * var(--e))
+            color-mix(in oklch, var(--shadow), transparent 83%),
+          calc(var(--dx) * 8px * var(--e)) calc(var(--dy) * 8px * var(--e))
+            calc(16px * var(--e))
+            color-mix(in oklch, var(--shadow), transparent 88%);
+      }
+
+      /* ---- semantic tokens for the sample UI (all CSS; transition natively) ---- */
+      #env {
+        --l-page: attr(data-l-page type(<number>), 0.98);
+        --l-surface: attr(data-l-surface type(<number>), 0.95);
+        --l-raised: attr(data-l-raised type(<number>), 0.99);
+        --l-border: attr(data-l-border type(<number>), 0.8);
+        --l-solid: attr(data-l-solid type(<number>), 0.5);
+        --l-text-lo: attr(data-l-text-lo type(<number>), 0.55);
+        --l-text-hi: attr(data-l-text-hi type(<number>), 0.25);
+
+        --page: --lit(var(--neutral), var(--l-page), 1);
+        --surf2: --lit(var(--neutral), var(--l-surface), 0.96);
+        --raised: --lit(var(--neutral), var(--l-raised), 1);
+        --border-l: var(--l-border);
+        --solid: --lit(var(--brand), var(--l-solid), 0.3);
+        --text-lo: --lit(var(--neutral), var(--l-text-lo), 0.12);
+        --text-hi: --lit(var(--neutral), var(--l-text-hi), 0.05);
+        --on-solid: contrast-color(var(--solid)); /* black/white by CSS */
+        --brand-text: --lit(var(--brand), var(--l-text-hi), 0.2);
+      }
+
+      /* ===========================================================================
+   LAYOUT — base font 13px; nothing below 12px.
+   =========================================================================== */
+      body {
+        margin: 0;
+        padding: 24px;
+        background: light-dark(#e9ebf0, #1a1c22);
+        color: light-dark(#14151a, #e7e9f0);
+        font-size: 13px;
+      }
+      h1 {
+        font-size: 16px;
+        margin: 0 0 2px;
+      }
+      .sub {
+        color: light-dark(#6a6e7a, #9aa0ad);
+        font-size: 13px;
+        margin: 0 0 16px;
+        max-width: 840px;
+      }
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        margin: 0 0 12px;
+        flex-wrap: wrap;
+      }
+      .pick {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+      }
+      .pick input[type="color"] {
+        width: 30px;
+        height: 24px;
+        border: 1px solid #8884;
+        border-radius: 5px;
+        padding: 0;
+        background: none;
+        cursor: pointer;
+      }
+      .switch {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        cursor: pointer;
+        user-select: none;
+        font-size: 13px;
+      }
+      .switch input {
+        position: absolute;
+        opacity: 0;
+      } /* visually hidden; :has() reads it */
+      .track {
+        width: 40px;
+        height: 22px;
+        border-radius: 11px;
+        background: #9994;
+        position: relative;
+        transition: background 0.2s;
+      }
+      .track::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 1px 2px #0005;
+        transition: left 0.2s;
+      }
+      .switch:has(input:checked) .track {
+        background: oklch(0.6 0.15 264);
+      }
+      .switch:has(input:checked) .track::after {
+        left: 20px;
+      }
+
+      .ramps {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        width: 780px;
+      }
+      .ramp-row {
+        display: grid;
+        grid-template-columns: 60px 1fr;
+        gap: 10px;
+        align-items: center;
+      }
+      .ramp {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px #0003;
+      }
+      .ramp-label {
+        font: 600 13px/1 ui-sans-serif;
+      }
+      .sw {
+        height: 62px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        padding: 4px;
+        box-sizing: border-box;
+      }
+      .sw .role {
+        font: 700 12px/1.1 ui-sans-serif;
+      }
+      .sw .lc {
+        font:
+          12px/1.2 ui-monospace,
+          monospace;
+        opacity: 0.85;
+      }
+
+      /* category markers row, ONE 13-col grid matching the ramp-row exactly:
+         a 60px label gutter + 12 equal columns. minmax(0,1fr) stops the long
+         labels from widening their columns past the ramp. */
+      .cats {
+        display: grid;
+        grid-template-columns: 60px repeat(12, minmax(0, 1fr));
+        gap: 0 10px;
+        width: 780px;
+        margin-top: 2px;
+      }
+      .cat {
+        grid-row: 1;
+        padding-top: 5px;
+        font: 600 12px/1.2 ui-sans-serif;
+        color: light-dark(#555, #aab);
+        text-align: center;
+        border-top: 2px solid currentColor;
+        position: relative;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .cat::before,
+      .cat::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        width: 2px;
+        height: 5px;
+        background: currentColor;
+      }
+      .cat::before {
+        left: 0;
+      }
+      .cat::after {
+        right: 0;
+      }
+
+      .presets {
+        margin: 16px 0 6px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      button.preset {
+        font: inherit;
+        font-size: 13px;
+        padding: 5px 11px;
+        border: 1px solid #8884;
+        border-radius: 6px;
+        background: light-dark(#fff, #2a2d36);
+        color: inherit;
+        cursor: pointer;
+      }
+      .controls {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: repeat(2, 120px 1fr 40px);
+        gap: 5px 12px;
+        align-items: center;
+        max-width: 780px;
+        font-size: 12px;
+      }
+      .controls input[type="range"] {
+        width: 100%;
+      }
+
+      .demo {
+        margin-top: 24px;
+        width: 780px;
+        border-radius: 14px;
+        padding: 20px;
+        background: var(--page);
+      }
+      .surface {
+        background: var(--surf2);
+        border-radius: 12px;
+        padding: 16px;
+      }
+      .card {
+        background: var(--raised);
+        border-radius: 10px;
+        padding: 16px;
+      }
+      .card + .card {
+        margin-top: 14px;
+      }
+      .card h3 {
+        margin: 0 0 6px;
+        color: var(--text-hi);
+        font-size: 15px;
+      }
+      .card p {
+        margin: 0 0 12px;
+        color: var(--text-lo);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+      .btn {
+        border: 0;
+        border-radius: 8px;
+        padding: 8px 14px;
+        font: 600 13px/1 ui-sans-serif;
+        background: var(--solid);
+        color: var(--on-solid);
+        cursor: pointer;
+      }
+      .btn.ghost {
+        background: transparent;
+        color: var(--brand-text);
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .field {
+        border-radius: 8px;
+        padding: 9px 11px;
+        background: var(--surf2);
+        color: var(--text-lo);
+        font-size: 13px;
+      }
+      .title {
+        color: var(--text-hi);
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="env"
+      data-brand-l=".62"
+      data-brand-c=".15"
+      data-brand-h="264"
+      data-neut-l=".6"
+      data-neut-c=".02"
+      data-neut-h="264"
+      data-surf-h="264"
+      data-surf-c=".01"
+      data-surf-l=".97"
+      data-key-h="85"
+      data-key-s=".10"
+      data-sky-h="240"
+      data-sky-s=".10"
+      data-bounce-h="60"
+      data-bounce-s=".06"
+      data-surf-reflect=".10"
+      data-key-angle="315"
+    >
+      <h1>
+        A lit UI environment: brand + neutral ramps on a surface — pure CSS
+      </h1>
+      <p class="sub">
+        Pick three diffuse colors and a light. The brand and neutral ramps are
+        lit by one shared light and reflect a little of the surface, so they
+        belong together; contrast-critical steps meet APCA-Lc role targets;
+        borders and shadows come from the same light. Toggle dark mode or the
+        time of day and the whole UI re-lights in CSS.
+      </p>
+
+      <div class="toolbar">
+        <label class="pick"
+          >Brand <input type="color" id="pick-brand" value="#6e7bff"
+        /></label>
+        <label class="pick"
+          >Neutral <input type="color" id="pick-neut" value="#7c7f8a"
+        /></label>
+        <label class="pick"
+          >Surface tint <input type="color" id="pick-surf" value="#eceefb"
+        /></label>
+        <label class="switch"
+          ><input type="checkbox" id="mode" /><span class="track"></span>Dark
+          mode</label
+        >
+      </div>
+
+      <div class="ramps">
+        <div class="ramp-row">
+          <span class="ramp-label">Brand</span>
+          <div class="ramp brand" id="rampBrand"></div>
+        </div>
+        <div class="ramp-row">
+          <span class="ramp-label">Neutral</span>
+          <div class="ramp neutral" id="rampNeutral"></div>
+        </div>
+      </div>
+      <div class="cats" id="cats"></div>
+
+      <div class="presets">
+        <button class="preset" data-preset="midday">☀️ Midday</button>
+        <button class="preset" data-preset="dusk">🌆 Dusk</button>
+        <button class="preset" data-preset="overcast">☁️ Overcast</button>
+        <button class="preset" data-preset="moonlight">🌙 Moonlight</button>
+      </div>
+      <div class="controls" id="controls"></div>
+
+      <div class="demo">
+        <div
+          class="row"
+          style="justify-content: space-between; margin-bottom: 14px"
+        >
+          <span class="title" style="font-size: 16px">Dashboard</span>
+          <button class="btn">New report</button>
+        </div>
+        <div class="surface lit-border elevated" style="--elev: 0.8">
+          <div class="card lit-border elevated" style="--elev: 1.6">
+            <h3>Spending this month</h3>
+            <p>
+              This card sits on a surface, which sits on the page — three
+              neutral tones from one light. The heading meets a high-contrast
+              text target and this body meets a low-contrast one, both against
+              the raised surface.
+            </p>
+            <div class="row">
+              <button class="btn">Save</button
+              ><button class="btn ghost">Cancel</button>
+            </div>
+          </div>
+          <div
+            class="card lit-border elevated"
+            style="--elev: 3.2; margin-top: 14px"
+          >
+            <h3>Higher elevation</h3>
+            <p>
+              Raised further: a larger, softer, hue-matched shadow blends onto
+              the surface below, offset toward the lower-right (light from the
+              upper-left). The border catches light on its top edge and falls
+              into shadow at the bottom.
+            </p>
+            <div class="field lit-border">Search transactions…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      const env = document.getElementById("env");
+
+      /* ---- minimal APCA (sRGB) + oklch->rgb via 1x1 canvas ---------------------- */
+      function apca(t, b) {
+        const lin = (c) => (c / 255) ** 2.4,
+          Y = ([r, g, bb]) =>
+            0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(bb);
+        let Yt = Y(t),
+          Yb = Y(b);
+        const cl = (y) => (y > 0.022 ? y : y + (0.022 - y) ** 1.414);
+        Yt = cl(Yt);
+        Yb = cl(Yb);
+        let C =
+          Yb > Yt
+            ? (Yb ** 0.56 - Yt ** 0.57) * 1.14
+            : (Yb ** 0.65 - Yt ** 0.62) * 1.14;
+        let L = C * 100;
+        if (Math.abs(L) < 7.5) return 0;
+        return L > 0 ? L - 2.7 : L + 2.7;
+      }
+      const cv = document.createElement("canvas");
+      cv.width = cv.height = 1;
+      const ctx = cv.getContext("2d", { willReadFrequently: true });
+      function toRgb(color) {
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, 1, 1);
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, 1, 1);
+        const d = ctx.getImageData(0, 0, 1, 1).data;
+        return [d[0], d[1], d[2]];
+      }
+      const oklchRgb = (L, c, h) => toRgb(`oklch(${L} ${c} ${h})`);
+      function lForLc(target, c, h, bg) {
+        let best = 0.5,
+          err = 1e9;
+        for (let L = 0.04; L <= 0.99; L += 0.01) {
+          const e = Math.abs(Math.abs(apca(oklchRgb(L, c, h), bg)) - target);
+          if (e < err) {
+            err = e;
+            best = L;
+          }
+        }
+        return best;
+      }
+      /* hex -> oklch L,C,H (via canvas + a tiny sRGB->oklab) */
+      function hexToOklch(hex) {
+        const [r, g, b] = toRgb(hex).map((v) => v / 255);
+        const lin = (c) =>
+          c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+        const R = lin(r),
+          G = lin(g),
+          B = lin(b);
+        const l = Math.cbrt(
+          0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B
+        );
+        const m = Math.cbrt(
+          0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B
+        );
+        const s = Math.cbrt(
+          0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B
+        );
+        const L = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
+        const a = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
+        const bb = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+        const C = Math.hypot(a, bb);
+        let H = (Math.atan2(bb, a) * 180) / Math.PI;
+        if (H < 0) H += 360;
+        return { L: +L.toFixed(3), C: +C.toFixed(3), H: +H.toFixed(1) };
+      }
+
+      /* ---- 12 Radix/Horizon roles; Lc-anchored, interpolated for monotone order - */
+      const ROLES = [
+        { s: "25", g: "Background", t: 1, base: 0.985 },
+        { s: "50", g: "Background", t: 0.92, base: 0.95 },
+        { s: "100", g: "Component", t: 0.83, base: 0.9 },
+        { s: "200", g: "Component", t: 0.72, base: 0.83 },
+        { s: "300", g: "Component", t: 0.62, base: 0.75 },
+        { s: "400", g: "Border", t: 0.52, base: 0.66, lc: 15 },
+        { s: "500", g: "Border", t: 0.44, base: 0.58, lc: 30 },
+        { s: "600", g: "Border", t: 0.36, base: 0.5, lc: 45 },
+        { s: "700", g: "Solid", t: 0.3, base: 0.42, lc: 60 },
+        { s: "800", g: "Solid", t: 0.24, base: 0.34, lc: 75 },
+        { s: "900", g: "Text", t: 0.16, base: 0.25, lc: 60 },
+        { s: "950", g: "Text", t: 0.08, base: 0.15, lc: 90 }
+      ];
+      function buildRamp(id, c, h, bg) {
+        const el = document.getElementById(id);
+        el.innerHTML = "";
+        const Ls = new Array(12).fill(null);
+        Ls[0] = ROLES[0].base;
+        ROLES.forEach((r, i) => {
+          if (r.lc != null) Ls[i] = lForLc(r.lc, c, h, bg);
+        });
+        for (let i = 0; i < 12; i++) {
+          if (Ls[i] != null) continue;
+          let a = i - 1;
+          while (a >= 0 && Ls[a] == null) a--;
+          let b = i + 1;
+          while (b < 12 && Ls[b] == null) b++;
+          Ls[i] =
+            a < 0
+              ? Ls[b]
+              : b >= 12
+                ? Math.max(0.05, Ls[a] - 0.1)
+                : Ls[a] + (Ls[b] - Ls[a]) * ((i - a) / (b - a));
+        }
+        for (let i = 1; i < 12; i++)
+          if (Ls[i] >= Ls[i - 1]) Ls[i] = Ls[i - 1] - 0.01;
+        ROLES.forEach((r, i) => {
+          const L = +Ls[i].toFixed(3);
+          const d = document.createElement("div");
+          d.className = "sw";
+          d.dataset.l = L;
+          d.dataset.lit = r.t;
+          const lc = Math.round(Math.abs(apca(oklchRgb(L, c, h), bg)));
+          d.innerHTML = `<span class="role">${r.s}</span><span class="lc">${r.lc != null ? "Lc" + lc : "L" + L.toFixed(2)}</span>`;
+          el.appendChild(d);
+        });
+        return Ls;
+      }
+      function buildCats() {
+        const cats = document.getElementById("cats");
+        cats.innerHTML = "";
+        const spans = {
+          Background: 2,
+          Component: 3,
+          Border: 3,
+          Solid: 2,
+          Text: 2
+        };
+        let col = 2; // column 1 is the 60px label gutter; swatches start at col 2
+        for (const [name, span] of Object.entries(spans)) {
+          const s = document.createElement("span");
+          s.className = "cat";
+          s.textContent = name;
+          s.style.gridColumn = `${col} / span ${span}`;
+          cats.appendChild(s);
+          col += span;
+        }
+      }
+      function modeIsDark() {
+        return document.getElementById("mode").checked;
+      }
+      function runLcPass() {
+        const bc = +env.dataset.brandC,
+          bh = +env.dataset.brandH,
+          nc = +env.dataset.neutC,
+          nh = +env.dataset.neutH;
+        const surfL = modeIsDark() ? 0.16 : 0.97;
+        env.setAttribute("data-surf-l", surfL); // drives --surface (plain number; not light-dark())
+        const bgRGB = oklchRgb(surfL, +env.dataset.surfC, +env.dataset.surfH);
+        buildRamp("rampBrand", bc, bh, bgRGB);
+        const nLs = buildRamp("rampNeutral", nc, nh, bgRGB);
+        buildCats();
+        const at = (arr, s) => arr[ROLES.findIndex((r) => r.s === s)];
+        // tokens: in dark mode, surfaces are dark and text is light — flip the targets
+        if (modeIsDark()) {
+          env.setAttribute("data-l-page", surfL.toFixed(3));
+          env.setAttribute("data-l-surface", (surfL + 0.04).toFixed(3));
+          env.setAttribute("data-l-raised", (surfL + 0.07).toFixed(3));
+          env.setAttribute("data-l-border", at(nLs, "600").toFixed(3));
+          env.setAttribute(
+            "data-l-text-lo",
+            (1 - at(nLs, "900") + 0.15).toFixed(3)
+          );
+          env.setAttribute("data-l-text-hi", (0.97).toFixed(3));
+        } else {
+          env.setAttribute("data-l-page", surfL.toFixed(3));
+          env.setAttribute("data-l-surface", at(nLs, "50").toFixed(3));
+          env.setAttribute(
+            "data-l-raised",
+            Math.min(0.995, surfL + 0.015).toFixed(3)
+          );
+          env.setAttribute("data-l-border", at(nLs, "500").toFixed(3));
+          env.setAttribute("data-l-text-lo", at(nLs, "900").toFixed(3));
+          env.setAttribute("data-l-text-hi", at(nLs, "950").toFixed(3));
+        }
+        // brand solid: aim a bit darker (Lc70) so white text wins on it
+        env.setAttribute("data-l-solid", lForLc(70, bc, bh, bgRGB).toFixed(3));
+      }
+
+      /* ---- color pickers -> oklch data-attrs ----------------------------------- */
+      const bindPicker = (id, prefix) => {
+        const inp = document.getElementById(id);
+        inp.addEventListener("input", () => {
+          const { L, C, H } = hexToOklch(inp.value);
+          env.setAttribute(`data-${prefix}-l`, L);
+          env.setAttribute(`data-${prefix}-c`, C);
+          env.setAttribute(`data-${prefix}-h`, H);
+          runLcPass();
+        });
+      };
+      bindPicker("pick-brand", "brand");
+      bindPicker("pick-neut", "neut");
+      document.getElementById("pick-surf").addEventListener("input", (e) => {
+        const { C, H } = hexToOklch(e.target.value);
+        env.setAttribute("data-surf-c", C);
+        env.setAttribute("data-surf-h", H);
+        runLcPass();
+      });
+      document.getElementById("mode").addEventListener("change", runLcPass);
+
+      /* ---- light sliders -> data-attrs ----------------------------------------- */
+      const KNOBS = [
+        ["key-h", 0, 360, 1],
+        ["key-s", 0, 0.3, 0.01],
+        ["sky-h", 180, 300, 1],
+        ["sky-s", 0, 0.3, 0.01],
+        ["bounce-s", 0, 0.2, 0.01],
+        ["surf-reflect", 0, 0.3, 0.01],
+        ["key-angle", 0, 360, 1]
+      ];
+      const controls = document.getElementById("controls");
+      const camel = (n) => n.replace(/-(\w)/g, (_, x) => x.toUpperCase());
+      for (const [name, min, max, step] of KNOBS) {
+        const lbl = document.createElement("label");
+        lbl.textContent = name;
+        const inp = document.createElement("input");
+        inp.type = "range";
+        inp.min = min;
+        inp.max = max;
+        inp.step = step;
+        inp.value = env.dataset[camel(name)];
+        const out = document.createElement("span");
+        out.textContent = inp.value;
+        inp.addEventListener("input", () => {
+          env.setAttribute("data-" + name, inp.value);
+          out.textContent = inp.value;
+        });
+        controls.append(lbl, inp, out);
+      }
+      const PRESETS = {
+        midday: {
+          "key-h": 85,
+          "key-s": 0.1,
+          "sky-h": 240,
+          "sky-s": 0.1,
+          "bounce-s": 0.06,
+          "surf-reflect": 0.1,
+          "key-angle": 315
+        },
+        dusk: {
+          "key-h": 42,
+          "key-s": 0.18,
+          "sky-h": 268,
+          "sky-s": 0.16,
+          "bounce-s": 0.12,
+          "surf-reflect": 0.14,
+          "key-angle": 290
+        },
+        overcast: {
+          "key-h": 250,
+          "key-s": 0.03,
+          "sky-h": 250,
+          "sky-s": 0.05,
+          "bounce-s": 0,
+          "surf-reflect": 0.06,
+          "key-angle": 0
+        },
+        moonlight: {
+          "key-h": 255,
+          "key-s": 0.14,
+          "sky-h": 268,
+          "sky-s": 0.18,
+          "bounce-s": 0.03,
+          "surf-reflect": 0.1,
+          "key-angle": 300
+        }
+      };
+      document.querySelectorAll("[data-preset]").forEach((b) =>
+        b.addEventListener("click", () => {
+          for (const [k, v] of Object.entries(PRESETS[b.dataset.preset]))
+            env.setAttribute("data-" + k, v);
+          controls.querySelectorAll("input").forEach((inp) => {
+            const n = inp.previousElementSibling.textContent;
+            const v = env.getAttribute("data-" + n);
+            if (v != null) {
+              inp.value = v;
+              inp.nextElementSibling.textContent = v;
+            }
+          });
+        })
+      );
+
+      runLcPass();
+      window.__ready = true;
+    </script>
+  </body>
+</html>
